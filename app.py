@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
@@ -17,8 +19,9 @@ column_mapping = {
 }
 required_columns = list(column_mapping.keys())
 
-st.title("🌱 Soil Health ML Predictor")
-st.markdown("Upload a soil dataset (.csv or .xlsx) to run prediction.")
+st.set_page_config(page_title="Soil Health ML App", layout="wide")
+st.title("🌱 Soil Health ML Predictor with Visualization")
+st.markdown("Upload a soil dataset (.csv or .xlsx) to analyze and predict soil nutrient values.")
 
 uploaded_file = st.file_uploader("Upload your dataset", type=['csv', 'xlsx'])
 
@@ -26,7 +29,6 @@ mode = st.selectbox("Choose prediction mode:", ["Classification (Fertility Level
 
 if uploaded_file:
     try:
-        # Read file
         if uploaded_file.name.endswith('.csv'):
             df = pd.read_csv(uploaded_file)
         else:
@@ -49,6 +51,22 @@ if uploaded_file:
 
         df = df[present_cols].dropna().drop_duplicates()
 
+        st.subheader("📊 Raw Data Preview")
+        st.dataframe(df)
+
+        # Sidebar filter
+        st.sidebar.header("🔍 Filter Data")
+        if 'pH' in df.columns:
+            ph_range = st.sidebar.slider("pH Range", float(df['pH'].min()), float(df['pH'].max()), (5.5, 7.5))
+            df = df[(df['pH'] >= ph_range[0]) & (df['pH'] <= ph_range[1])]
+
+        # Feature distribution
+        st.subheader("📉 Feature Distribution")
+        feature_to_plot = st.selectbox("Select feature for histogram:", present_cols)
+        fig1, ax1 = plt.subplots()
+        sns.histplot(df[feature_to_plot], kde=True, ax=ax1)
+        st.pyplot(fig1)
+
         # Normalize
         scaler = MinMaxScaler()
         df_scaled = pd.DataFrame(scaler.fit_transform(df), columns=present_cols)
@@ -69,8 +87,17 @@ if uploaded_file:
             y_pred = model.predict(X_test)
 
             st.success("✅ Classification Complete")
-            st.write("Accuracy:", accuracy_score(y_test, y_pred))
+            st.write("**Accuracy:**", accuracy_score(y_test, y_pred))
+            st.text("Classification Report:")
             st.text(classification_report(y_test, y_pred))
+
+            # Feature importance chart
+            st.subheader("🔬 Feature Importance")
+            importance = model.feature_importances_
+            fig2, ax2 = plt.subplots()
+            ax2.barh(X.columns, importance)
+            ax2.set_title("Random Forest Feature Importance")
+            st.pyplot(fig2)
 
         else:
             if 'Nitrogen' not in df.columns:
@@ -90,8 +117,17 @@ if uploaded_file:
             r2 = r2_score(y_test, y_pred)
 
             st.success("✅ Regression Complete")
-            st.write("RMSE:", rmse)
-            st.write("R² Score:", r2)
+            st.write("**RMSE:**", rmse)
+            st.write("**R² Score:**", r2)
+
+            st.subheader("📈 Actual vs Predicted Nitrogen")
+            fig3, ax3 = plt.subplots()
+            ax3.scatter(y_test, y_pred, alpha=0.6)
+            ax3.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--')
+            ax3.set_xlabel("Actual Nitrogen")
+            ax3.set_ylabel("Predicted Nitrogen")
+            ax3.set_title("Actual vs Predicted")
+            st.pyplot(fig3)
 
     except Exception as e:
         st.error(f"Error: {e}")
