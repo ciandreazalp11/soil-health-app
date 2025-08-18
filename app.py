@@ -12,7 +12,7 @@ from sklearn.svm import SVC, SVR
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import accuracy_score, classification_report, mean_squared_error, r2_score
 
-st.set_page_config(page_title="🌿 Soil Health ML App", layout="wide")
+st.set_page_config(page_title="🌿 Plaza and Baliling Capstone Soil Health ML App", layout="wide")
 st.title("🌿 Soil Health ML App with Merging, Cleaning & Multiple Models")
 st.markdown("Upload your soil datasets, merge them, clean the data, and run predictions using various ML models.")
 
@@ -148,3 +148,4 @@ if cleaned_dfs:
         ax2.set_xlabel("Actual")
         ax2.set_ylabel("Predicted")
         st.pyplot(fig2)
+
