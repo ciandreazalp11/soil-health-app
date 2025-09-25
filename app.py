@@ -25,63 +25,101 @@ st.markdown("""
     <style>
     /* Background */
     .stApp {
-        background: linear-gradient(135deg, #eaf4e1, #f5f5dc);
+        background: linear-gradient(160deg, #0d1b0d, #1a2e1a, #253524);
+        color: #e6f0e6;
     }
 
     /* Sidebar */
     section[data-testid="stSidebar"] {
-        background-color: #eaf4e1 !important;
+        background-color: #111c11 !important;
         padding: 10px;
         border-radius: 12px;
-        box-shadow: 0px 0px 12px rgba(0,0,0,0.1);
+        color: #d9ead3;
+    }
+    section[data-testid="stSidebar"] * {
+        color: #d9ead3 !important;
+        font-weight: 500;
+    }
+
+    /* Hover animation for menu */
+    div[data-testid="stSidebarNav"] a:hover {
+        background-color: rgba(90,143,41,0.3) !important;
+        transform: scale(1.05);
+        transition: all 0.3s ease-in-out;
+        border-radius: 8px;
     }
 
     /* Headers */
     h1, h2, h3 {
-        color: #2e4600;
+        color: #cce5cc;
         font-family: 'Trebuchet MS', sans-serif;
-        text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+        font-weight: bold;
     }
 
-    /* Metric cards */
+    /* Metric cards - holographic style */
     .stMetric {
-        background: rgba(255,255,255,0.8);
-        padding: 12px;
-        border-radius: 12px;
-        box-shadow: 0px 2px 6px rgba(0,0,0,0.15);
-        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        background: rgba(30, 60, 30, 0.65);
+        color: #f0f0f0;
+        padding: 15px;
+        border-radius: 15px;
+        box-shadow: 0px 8px 20px rgba(0,0,0,0.7);
+        backdrop-filter: blur(10px);
+        text-align: center;
+        transition: transform 0.3s ease;
     }
     .stMetric:hover {
-        transform: scale(1.03);
-        box-shadow: 0px 4px 12px rgba(0,0,0,0.25);
+        transform: translateY(-5px) scale(1.02);
     }
 
     /* Dataframe styling */
     .stDataFrame {
         border-radius: 12px;
         overflow: hidden;
+        box-shadow: 0px 2px 6px rgba(0,0,0,0.4);
     }
 
-    /* Holographic hover effect for buttons */
-    button[kind="primary"] {
-        background: linear-gradient(45deg, #5a8f29, #b4ec51, #429321);
-        background-size: 300% 300%;
-        animation: gradientShift 5s ease infinite;
+    /* Buttons */
+    .stButton button {
+        background: linear-gradient(135deg, #5a8f29, #9acd32);
+        color: white;
+        border-radius: 8px;
         border: none;
-        color: white !important;
+        padding: 0.6em 1.2em;
         font-weight: bold;
-        border-radius: 12px;
-        padding: 8px 16px;
+        transition: all 0.3s ease;
     }
-    button[kind="primary"]:hover {
-        box-shadow: 0px 0px 20px rgba(90,143,41,0.6);
+    .stButton button:hover {
         transform: scale(1.05);
+        box-shadow: 0px 4px 12px rgba(154,205,50,0.6);
     }
 
-    @keyframes gradientShift {
-        0% {background-position: 0% 50%;}
-        50% {background-position: 100% 50%;}
-        100% {background-position: 0% 50%;}
+    /* Footer */
+    .footer {
+        text-align: center;
+        color: #bcd9b2;
+        font-size: 15px;
+        padding: 10px;
+        margin-top: 20px;
+    }
+    .footer span {
+        font-weight: bold;
+        color: #9acd32;
+    }
+
+    /* Performance legend styling */
+    .legend {
+        background: rgba(20,40,20,0.7);
+        border-radius: 12px;
+        padding: 10px;
+        margin-top: 15px;
+        font-size: 14px;
+    }
+    .legend span {
+        display: inline-block;
+        width: 15px;
+        height: 15px;
+        margin-right: 8px;
+        border-radius: 4px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -95,9 +133,9 @@ with st.sidebar:
         menu_icon="list", 
         default_index=0,
         styles={
-            "container": {"padding": "5!important", "background-color": "#eaf4e1"},
-            "icon": {"color": "#2e4600", "font-size": "20px"},
-            "nav-link": {"color":"#2e4600","font-size": "16px"},
+            "container": {"padding": "5!important", "background-color": "#111c11"},
+            "icon": {"color": "#9acd32", "font-size": "20px"},
+            "nav-link": {"color":"#d9ead3","font-size": "16px"},
             "nav-link-selected": {"background-color": "#5a8f29"},
         }
     )
@@ -151,12 +189,14 @@ elif selected == "📊 Visualization":
         df = st.session_state["df"]
 
         feature = st.selectbox("Select a feature", df.columns)
-        fig = px.histogram(df, x=feature, nbins=20, marginal="box", color_discrete_sequence=["#5a8f29"])
+        fig = px.histogram(df, x=feature, nbins=20, marginal="box", color_discrete_sequence=["#9acd32"])
+        fig.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig, use_container_width=True)
 
         st.subheader("🌐 Correlation Heatmap")
         corr = df.corr(numeric_only=True)
-        fig = px.imshow(corr, text_auto=True, color_continuous_scale="YlGn")
+        fig = px.imshow(corr, text_auto=True, color_continuous_scale="Greens")
+        fig.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Please upload data first.")
@@ -224,43 +264,29 @@ elif selected == "📈 Results":
 
         if task == "Classification":
             acc = accuracy_score(y_test, y_pred)
-
-            # Define interpretation ranges
-            if acc < 0.6:
-                interpretation = "❌ Poor Accuracy – Model needs significant improvement."
-                color = "red"
-            elif 0.6 <= acc < 0.75:
-                interpretation = "⚠️ Fair Accuracy – Model may be usable but not reliable."
-                color = "orange"
-            elif 0.75 <= acc < 0.9:
-                interpretation = "✅ Good Accuracy – Model performs well."
-                color = "yellowgreen"
-            else:
-                interpretation = "🌟 Excellent Accuracy – Model is highly reliable."
-                color = "green"
-
+            color = "green" if acc > 0.8 else "orange" if acc > 0.6 else "red"
             st.metric("Accuracy", f"{acc:.2f}")
-            st.markdown(f"**Legend:** {interpretation}")
 
             fig = go.Figure(go.Indicator(
                 mode="gauge+number",
                 value=acc,
-                gauge={
-                    'axis': {'range': [0, 1]},
-                    'bar': {'color': color},
-                    'steps': [
-                        {'range': [0, 0.6], 'color': "lightcoral"},
-                        {'range': [0.6, 0.75], 'color': "orange"},
-                        {'range': [0.75, 0.9], 'color': "yellowgreen"},
-                        {'range': [0.9, 1], 'color': "green"}
-                    ]
-                },
+                gauge={'axis': {'range': [0, 1]}, 'bar': {'color': color}},
                 title={'text': "Accuracy Gauge"}
             ))
+            fig.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)")
             st.plotly_chart(fig, use_container_width=True)
 
             st.text("Classification Report:")
             st.text(classification_report(y_test, y_pred))
+
+            # Legend
+            st.markdown("""
+            <div class='legend'>
+                <span style='background:green'></span> Accuracy > 0.80 → Excellent  
+                <span style='background:orange'></span> 0.60 – 0.80 → Moderate  
+                <span style='background:red'></span> < 0.60 → Poor  
+            </div>
+            """, unsafe_allow_html=True)
 
         else:
             rmse = mean_squared_error(y_test, y_pred, squared=False)
@@ -270,31 +296,20 @@ elif selected == "📈 Results":
             col1.metric("RMSE", f"{rmse:.2f}")
             col2.metric("R² Score", f"{r2:.2f}")
 
-            # Add interpretation legend for R²
-            if r2 < 0.3:
-                interp = "❌ Poor fit – Model explains very little variance."
-            elif 0.3 <= r2 < 0.6:
-                interp = "⚠️ Fair fit – Model explains some variance."
-            elif 0.6 <= r2 < 0.8:
-                interp = "✅ Good fit – Model explains most variance."
-            else:
-                interp = "🌟 Excellent fit – Model explains nearly all variance."
-
-            st.markdown(f"**Legend:** {interp}")
-
-            fig = px.scatter(
-                x=y_test, y=y_pred,
-                labels={"x": "Actual", "y": "Predicted"},
-                color_discrete_sequence=["#5a8f29"]
-            )
-            fig.add_trace(go.Scatter(
-                x=[min(y_test), max(y_test)], 
-                y=[min(y_test), max(y_test)], 
-                mode="lines", 
-                name="Ideal", 
-                line=dict(color="red", dash="dash")
-            ))
+            fig = px.scatter(x=y_test, y=y_pred, labels={"x": "Actual", "y": "Predicted"}, color_discrete_sequence=["#9acd32"])
+            fig.add_trace(go.Scatter(x=[min(y_test), max(y_test)], y=[min(y_test), max(y_test)], mode="lines", name="Ideal", line=dict(color="red", dash="dash")))
+            fig.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)")
             st.plotly_chart(fig, use_container_width=True)
+
+            # Legend for regression
+            st.markdown("""
+            <div class='legend'>
+                <span style='background:green'></span> R² > 0.8 → Strong model  
+                <span style='background:orange'></span> 0.5 – 0.8 → Moderate fit  
+                <span style='background:red'></span> < 0.5 → Weak fit  
+            </div>
+            """, unsafe_allow_html=True)
+
     else:
         st.info("Please run a model first.")
 
@@ -302,12 +317,11 @@ elif selected == "📈 Results":
 elif selected == "🌿 Insights":
     st.title("🌿 Soil Health Insights & Recommendations")
     st.markdown("""
-    - If **Nitrogen is low**, soil may need **nitrogen-based fertilizers**.
-    - If **pH < 5.5**, consider **lime treatment** to reduce acidity.
-    - High **Organic Matter** usually indicates healthier soil.
-    - Always validate ML predictions with **field tests**.
+    - If **Nitrogen is low**, soil may need **nitrogen-based fertilizers**.  
+    - If **pH < 5.5**, consider **lime treatment** to reduce acidity.  
+    - High **Organic Matter** usually indicates healthier soil.  
+    - Always validate ML predictions with **field tests**.  
     """)
 
 # ----------------- FOOTER -----------------
-st.markdown("---")
-st.markdown("👨‍💻 Developed by **Andre Plaza** | 🌱 Capstone Project")
+st.markdown("<div class='footer'>👨‍💻 Developed by <span>Andre Plaza</span> & <span>Rica Baliling</span> | 🌱 Capstone Project</div>", unsafe_allow_html=True)
