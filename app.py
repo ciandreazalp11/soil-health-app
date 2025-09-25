@@ -216,4 +216,5 @@ with tabs[4]:
 
 # ----------------- FOOTER -----------------
 st.markdown("---")
-st.markdown("👨‍💻 Developed by **Andre Plaza** & **[Partner’s Name]** | 🌱 Soil Health Capstone Project")
+st.markdown("👨‍💻 Developed by **Andre Plaza** & **[Rica Baliling]** | 🌱 Soil Health Capstone Project")
+
