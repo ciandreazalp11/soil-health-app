@@ -23,36 +23,59 @@ st.set_page_config(
 # ----------------- CUSTOM CSS -----------------
 st.markdown("""
     <style>
-    /* Background */
+    /* Background with soil + green gradient */
     .stApp {
-        background: linear-gradient(to right, #f5f5dc, #eaf4e1);
+        background: linear-gradient(135deg, #e2dac5, #d6e6c3, #f5f5dc);
+        background-attachment: fixed;
     }
 
     /* Sidebar */
     section[data-testid="stSidebar"] {
-        background-color: #eaf4e1 !important;
-        padding: 10px;
+        background: linear-gradient(to bottom, #8fbf4d, #5a8f29);
+        color: white;
         border-radius: 12px;
+    }
+
+    /* Sidebar text */
+    section[data-testid="stSidebar"] .css-1v3fvcr, 
+    section[data-testid="stSidebar"] .css-qri22k {
+        color: white !important;
     }
 
     /* Headers */
     h1, h2, h3 {
-        color: #2e4600;
+        color: #3d5229;
         font-family: 'Trebuchet MS', sans-serif;
+        font-weight: bold;
     }
 
     /* Metric cards */
     .stMetric {
-        background-color: #ffffff;
-        padding: 12px;
-        border-radius: 10px;
-        box-shadow: 0px 2px 6px rgba(0,0,0,0.1);
+        background: #ffffff;
+        padding: 15px;
+        border-radius: 12px;
+        box-shadow: 0px 4px 10px rgba(0,0,0,0.1);
+        text-align: center;
     }
 
-    /* Dataframe styling */
+    /* DataFrame styling */
     .stDataFrame {
-        border-radius: 10px;
+        border-radius: 12px;
         overflow: hidden;
+        box-shadow: 0px 2px 6px rgba(0,0,0,0.15);
+    }
+
+    /* Footer */
+    .footer {
+        text-align: center;
+        color: #3d5229;
+        font-size: 15px;
+        padding: 10px;
+        margin-top: 20px;
+    }
+    .footer span {
+        font-weight: bold;
+        color: #2e4600;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -66,10 +89,10 @@ with st.sidebar:
         menu_icon="list", 
         default_index=0,
         styles={
-            "container": {"padding": "5!important", "background-color": "#eaf4e1"},
-            "icon": {"color": "#2e4600", "font-size": "20px"},
-            "nav-link": {"color":"#2e4600","font-size": "16px"},
-            "nav-link-selected": {"background-color": "#5a8f29"},
+            "container": {"padding": "5!important"},
+            "icon": {"color": "white", "font-size": "20px"},
+            "nav-link": {"color":"white","font-size": "16px"},
+            "nav-link-selected": {"background-color": "#3d5229"},
         }
     )
 
@@ -234,4 +257,7 @@ elif selected == "🌿 Insights":
 
 # ----------------- FOOTER -----------------
 st.markdown("---")
-st.markdown("👨‍💻 Developed by **Andre Plaza** & **[Partner’s Name]** | 🌱 Capstone Project")
+st.markdown(
+    '<div class="footer">👨‍💻 Developed by <span>Andre Plaza</span> & <span>Rica Baliling</span> | 🌱 Capstone Project</div>', 
+    unsafe_allow_html=True
+)
