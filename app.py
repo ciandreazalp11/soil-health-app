@@ -49,7 +49,7 @@ st.caption("📊 Upload soil datasets, clean them, visualize distributions, and 
 
 # ----------------- SIDEBAR -----------------
 st.sidebar.header("⚙️ App Settings")
-st.sidebar.info("Developed by **Andre Plaza** & **[Partner’s Name]** 🌿")
+st.sidebar.info("Developed by **Andre Plaza** & **[Rica Baliling]** 🌿")
 
 # Column mapping
 column_mapping = {
@@ -217,4 +217,5 @@ with tabs[4]:
 # ----------------- FOOTER -----------------
 st.markdown("---")
 st.markdown("👨‍💻 Developed by **Andre Plaza** & **[Rica Baliling]** | 🌱 Soil Health Capstone Project")
+
 
