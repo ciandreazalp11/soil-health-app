@@ -20,41 +20,42 @@ st.set_page_config(
     page_icon="🌿"
 )
 
-# ----------------- CUSTOM CSS -----------------
+# ----------------- CUSTOM CSS (Dark Moss Theme) -----------------
 st.markdown("""
     <style>
-    /* Background with soil + green gradient */
+    /* Background: dark moss + soil brown gradient */
     .stApp {
-        background: linear-gradient(135deg, #e2dac5, #d6e6c3, #f5f5dc);
+        background: linear-gradient(135deg, #1b2d1b, #2f3e2f, #3d5229);
         background-attachment: fixed;
+        color: #e0e0e0;
     }
 
     /* Sidebar */
     section[data-testid="stSidebar"] {
-        background: linear-gradient(to bottom, #8fbf4d, #5a8f29);
-        color: white;
+        background: linear-gradient(to bottom, #2f3e2f, #1e2b1e);
+        color: #d9ead3;
         border-radius: 12px;
     }
 
     /* Sidebar text */
-    section[data-testid="stSidebar"] .css-1v3fvcr, 
-    section[data-testid="stSidebar"] .css-qri22k {
-        color: white !important;
+    section[data-testid="stSidebar"] * {
+        color: #d9ead3 !important;
     }
 
     /* Headers */
     h1, h2, h3 {
-        color: #3d5229;
+        color: #d9ead3;
         font-family: 'Trebuchet MS', sans-serif;
         font-weight: bold;
     }
 
     /* Metric cards */
     .stMetric {
-        background: #ffffff;
+        background: #2a3c2a;
+        color: #f0f0f0;
         padding: 15px;
         border-radius: 12px;
-        box-shadow: 0px 4px 10px rgba(0,0,0,0.1);
+        box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
         text-align: center;
     }
 
@@ -62,20 +63,20 @@ st.markdown("""
     .stDataFrame {
         border-radius: 12px;
         overflow: hidden;
-        box-shadow: 0px 2px 6px rgba(0,0,0,0.15);
+        box-shadow: 0px 2px 6px rgba(0,0,0,0.4);
     }
 
     /* Footer */
     .footer {
         text-align: center;
-        color: #3d5229;
+        color: #bcd9b2;
         font-size: 15px;
         padding: 10px;
         margin-top: 20px;
     }
     .footer span {
         font-weight: bold;
-        color: #2e4600;
+        color: #9acd32;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -90,8 +91,8 @@ with st.sidebar:
         default_index=0,
         styles={
             "container": {"padding": "5!important"},
-            "icon": {"color": "white", "font-size": "20px"},
-            "nav-link": {"color":"white","font-size": "16px"},
+            "icon": {"color": "#9acd32", "font-size": "20px"},
+            "nav-link": {"color":"#d9ead3","font-size": "16px"},
             "nav-link-selected": {"background-color": "#3d5229"},
         }
     )
@@ -145,12 +146,12 @@ elif selected == "📊 Visualization":
         df = st.session_state["df"]
 
         feature = st.selectbox("Select a feature", df.columns)
-        fig = px.histogram(df, x=feature, nbins=20, marginal="box", color_discrete_sequence=["#5a8f29"])
+        fig = px.histogram(df, x=feature, nbins=20, marginal="box", color_discrete_sequence=["#9acd32"])
         st.plotly_chart(fig, use_container_width=True)
 
         st.subheader("🌐 Correlation Heatmap")
         corr = df.corr(numeric_only=True)
-        fig = px.imshow(corr, text_auto=True, color_continuous_scale="YlGn")
+        fig = px.imshow(corr, text_auto=True, color_continuous_scale="Greens")
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Please upload data first.")
@@ -218,7 +219,7 @@ elif selected == "📈 Results":
 
         if task == "Classification":
             acc = accuracy_score(y_test, y_pred)
-            color = "green" if acc > 0.8 else "orange" if acc > 0.6 else "red"
+            color = "limegreen" if acc > 0.8 else "gold" if acc > 0.6 else "red"
             st.metric("Accuracy", f"{acc:.2f}")
 
             fig = go.Figure(go.Indicator(
@@ -239,7 +240,7 @@ elif selected == "📈 Results":
             col1.metric("RMSE", f"{rmse:.2f}")
             col2.metric("R² Score", f"{r2:.2f}")
 
-            fig = px.scatter(x=y_test, y=y_pred, labels={"x": "Actual", "y": "Predicted"}, color_discrete_sequence=["#5a8f29"])
+            fig = px.scatter(x=y_test, y=y_pred, labels={"x": "Actual", "y": "Predicted"}, color_discrete_sequence=["#9acd32"])
             fig.add_trace(go.Scatter(x=[min(y_test), max(y_test)], y=[min(y_test), max(y_test)], mode="lines", name="Ideal", line=dict(color="red", dash="dash")))
             st.plotly_chart(fig, use_container_width=True)
     else:
