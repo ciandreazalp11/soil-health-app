@@ -251,7 +251,14 @@ elif selected == "🤖 Modeling":
             model.fit(X_train, y_train)
             y_pred = model.predict(X_test)
 
-            st.session_state["results"] = {"task": task, "y_test": y_test, "y_pred": y_pred}
+            # ✅ Save results safely
+            st.session_state["results"] = {
+                "task": task,
+                "y_test": y_test.tolist(),
+                "y_pred": y_pred.tolist()
+            }
+
+            st.success("✅ Model training completed! Go to 📈 Results to view performance.")
     else:
         st.info("Please upload data first.")
 
@@ -260,7 +267,10 @@ elif selected == "📈 Results":
     st.title("📈 Model Results")
     if "results" in st.session_state:
         results = st.session_state["results"]
-        y_test, y_pred, task = results["y_test"], results["y_pred"], results["task"]
+        task = results["task"]
+
+        y_test = np.array(results["y_test"])
+        y_pred = np.array(results["y_pred"])
 
         if task == "Classification":
             acc = accuracy_score(y_test, y_pred)
@@ -279,7 +289,6 @@ elif selected == "📈 Results":
             st.text("Classification Report:")
             st.text(classification_report(y_test, y_pred))
 
-            # Legend
             st.markdown("""
             <div class='legend'>
                 <span style='background:green'></span> Accuracy > 0.80 → Excellent  
@@ -288,7 +297,7 @@ elif selected == "📈 Results":
             </div>
             """, unsafe_allow_html=True)
 
-        else:
+        else:  # Regression
             rmse = mean_squared_error(y_test, y_pred, squared=False)
             r2 = r2_score(y_test, y_pred)
 
@@ -296,12 +305,16 @@ elif selected == "📈 Results":
             col1.metric("RMSE", f"{rmse:.2f}")
             col2.metric("R² Score", f"{r2:.2f}")
 
-            fig = px.scatter(x=y_test, y=y_pred, labels={"x": "Actual", "y": "Predicted"}, color_discrete_sequence=["#9acd32"])
-            fig.add_trace(go.Scatter(x=[min(y_test), max(y_test)], y=[min(y_test), max(y_test)], mode="lines", name="Ideal", line=dict(color="red", dash="dash")))
+            fig = px.scatter(x=y_test, y=y_pred,
+                             labels={"x": "Actual", "y": "Predicted"},
+                             color_discrete_sequence=["#9acd32"])
+            fig.add_trace(go.Scatter(x=[np.min(y_test), np.max(y_test)],
+                                     y=[np.min(y_test), np.max(y_test)],
+                                     mode="lines", name="Ideal",
+                                     line=dict(color="red", dash="dash")))
             fig.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)")
             st.plotly_chart(fig, use_container_width=True)
 
-            # Legend for regression
             st.markdown("""
             <div class='legend'>
                 <span style='background:green'></span> R² > 0.8 → Strong model  
