@@ -13,6 +13,7 @@ from sklearn.svm import SVC, SVR
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import accuracy_score, classification_report, mean_squared_error, mean_absolute_error, r2_score
 import joblib
+import time
 
 # ----------------- PAGE CONFIG -----------------
 st.set_page_config(
@@ -21,91 +22,104 @@ st.set_page_config(
     page_icon="🌿"
 )
 
-# ----------------- CUSTOM CSS -----------------
+# ----------------- THEME CONFIG -----------------
 st.markdown("""
-    <style>
-    .stApp {
-        background: linear-gradient(160deg, #0d1b0d, #1a2e1a, #253524);
-        color: #e6f0e6;
-    }
-    section[data-testid="stSidebar"] {
-        background-color: #111c11 !important;
-        padding: 10px;
-        border-radius: 12px;
-        color: #d9ead3;
-    }
-    section[data-testid="stSidebar"] * {
-        color: #d9ead3 !important;
-        font-weight: 500;
-    }
-    div[data-testid="stSidebarNav"] a:hover {
-        background-color: rgba(90,143,41,0.3) !important;
-        transform: scale(1.05);
-        transition: all 0.3s ease-in-out;
-        border-radius: 8px;
-    }
-    h1, h2, h3 {
-        color: #cce5cc;
-        font-family: 'Trebuchet MS', sans-serif;
-        font-weight: bold;
-    }
-    .stMetric {
-        background: rgba(30, 60, 30, 0.65);
-        color: #f0f0f0;
-        padding: 15px;
-        border-radius: 15px;
-        box-shadow: 0px 8px 20px rgba(0,0,0,0.7);
-        backdrop-filter: blur(10px);
-        text-align: center;
-        transition: transform 0.3s ease;
-    }
-    .stMetric:hover {
-        transform: translateY(-5px) scale(1.02);
-    }
-    .stDataFrame {
-        border-radius: 12px;
-        overflow: hidden;
-        box-shadow: 0px 2px 6px rgba(0,0,0,0.4);
-    }
-    .stButton button {
-        background: linear-gradient(135deg, #5a8f29, #9acd32);
-        color: white;
-        border-radius: 8px;
-        border: none;
-        padding: 0.6em 1.2em;
-        font-weight: bold;
-        transition: all 0.3s ease;
-    }
-    .stButton button:hover {
-        transform: scale(1.05);
-        box-shadow: 0px 4px 12px rgba(154,205,50,0.6);
-    }
-    .footer {
-        text-align: center;
-        color: #bcd9b2;
-        font-size: 15px;
-        padding: 10px;
-        margin-top: 20px;
-    }
-    .footer span {
-        font-weight: bold;
-        color: #9acd32;
-    }
-    .legend {
-        background: rgba(20,40,20,0.7);
-        border-radius: 12px;
-        padding: 10px;
-        margin-top: 15px;
-        font-size: 14px;
-    }
-    .legend span {
-        display: inline-block;
-        width: 15px;
-        height: 15px;
-        margin-right: 8px;
-        border-radius: 4px;
-    }
-    </style>
+<style>
+/* Background and Text */
+.stApp {
+    background: linear-gradient(160deg, #0d1b0d, #1a2e1a, #253524);
+    color: #e6f0e6;
+    font-family: 'Segoe UI', sans-serif;
+}
+
+/* Sidebar */
+section[data-testid="stSidebar"] {
+    background-color: #111c11 !important;
+    padding: 10px;
+    border-radius: 12px;
+}
+section[data-testid="stSidebar"] * {
+    color: #d9ead3 !important;
+}
+
+/* Hover Animations */
+div[data-testid="stSidebarNav"] a:hover {
+    background-color: rgba(90,143,41,0.3) !important;
+    transform: scale(1.05);
+    transition: all 0.3s ease-in-out;
+    border-radius: 8px;
+}
+
+/* Headers */
+h1, h2, h3 {
+    color: #cce5cc;
+    font-family: 'Trebuchet MS', sans-serif;
+    font-weight: bold;
+    text-shadow: 0px 0px 6px rgba(100,255,100,0.4);
+}
+
+/* Metric cards */
+[data-testid="stMetric"] {
+    background: rgba(30, 60, 30, 0.65);
+    color: #f0f0f0;
+    padding: 15px;
+    border-radius: 15px;
+    box-shadow: 0px 8px 20px rgba(0,0,0,0.7);
+    backdrop-filter: blur(10px);
+    text-align: center;
+    transition: transform 0.3s ease;
+}
+[data-testid="stMetric"]:hover {
+    transform: translateY(-5px) scale(1.02);
+}
+
+/* Animated float effect */
+@keyframes float {
+  0% {transform: translateY(0);}
+  50% {transform: translateY(-6px);}
+  100% {transform: translateY(0);}
+}
+[data-testid="stMetric"] { animation: float 4s ease-in-out infinite; }
+
+/* Buttons */
+.stButton button {
+    background: linear-gradient(135deg, #5a8f29, #9acd32);
+    color: white;
+    border-radius: 8px;
+    border: none;
+    padding: 0.6em 1.2em;
+    font-weight: bold;
+    transition: all 0.3s ease;
+}
+.stButton button:hover {
+    transform: scale(1.05);
+    box-shadow: 0px 4px 12px rgba(154,205,50,0.6);
+}
+
+/* Footer */
+.footer {
+    text-align: center;
+    color: #bcd9b2;
+    font-size: 15px;
+    padding: 10px;
+    margin-top: 20px;
+}
+.footer span {
+    font-weight: bold;
+    color: #9acd32;
+}
+
+/* Tabs styling */
+.stTabs [role="tab"] {
+    border: 1px solid #5a8f29;
+    border-radius: 10px;
+    background: rgba(40, 60, 40, 0.3);
+    margin: 3px;
+}
+.stTabs [role="tab"]:hover {
+    background: rgba(90,143,41,0.3);
+}
+</style>
 """, unsafe_allow_html=True)
 
 # ----------------- SIDEBAR MENU -----------------
@@ -124,7 +138,7 @@ with st.sidebar:
         }
     )
 
-# ----------------- COMMON SETTINGS -----------------
+# ----------------- COLUMN MAPPING -----------------
 column_mapping = {
     'pH': ['pH', 'ph', 'Soil_pH'],
     'Nitrogen': ['Nitrogen', 'N', 'Nitrogen_Level'],
@@ -142,23 +156,25 @@ if selected == "📂 Upload Data":
     cleaned_dfs = []
 
     if uploaded_files:
-        for file in uploaded_files:
-            try:
-                df = pd.read_csv(file) if file.name.endswith('.csv') else pd.read_excel(file)
-                renamed = {}
-                for std_col, alt_names in column_mapping.items():
-                    for alt in alt_names:
-                        if alt in df.columns:
-                            renamed[alt] = std_col
-                            break
-                df.rename(columns=renamed, inplace=True)
-                df = df[[col for col in required_columns if col in df.columns]]
-                df.dropna(inplace=True)
-                df.drop_duplicates(inplace=True)
-                cleaned_dfs.append(df)
-                st.success(f"✅ Cleaned: {file.name} ({df.shape[0]} rows)")
-            except Exception as e:
-                st.warning(f"⚠️ Skipped {file.name}: {e}")
+        with st.spinner("🧹 Cleaning and merging datasets..."):
+            time.sleep(1.2)
+            for file in uploaded_files:
+                try:
+                    df = pd.read_csv(file) if file.name.endswith('.csv') else pd.read_excel(file)
+                    renamed = {}
+                    for std_col, alt_names in column_mapping.items():
+                        for alt in alt_names:
+                            if alt in df.columns:
+                                renamed[alt] = std_col
+                                break
+                    df.rename(columns=renamed, inplace=True)
+                    df = df[[col for col in required_columns if col in df.columns]]
+                    df.dropna(inplace=True)
+                    df.drop_duplicates(inplace=True)
+                    cleaned_dfs.append(df)
+                    st.success(f"✅ Cleaned: {file.name} ({df.shape[0]} rows)")
+                except Exception as e:
+                    st.warning(f"⚠️ Skipped {file.name}: {e}")
 
         if cleaned_dfs:
             df = pd.concat(cleaned_dfs, ignore_index=True)
@@ -166,7 +182,6 @@ if selected == "📂 Upload Data":
             st.dataframe(df.head())
             st.session_state["df"] = df
 
-            # ✅ Added: Download merged and cleaned dataset
             csv = df.to_csv(index=False).encode('utf-8')
             st.download_button(
                 label="⬇️ Download Cleaned & Merged Dataset (CSV)",
@@ -174,6 +189,7 @@ if selected == "📂 Upload Data":
                 file_name="cleaned_merged_soil_dataset.csv",
                 mime="text/csv"
             )
+            st.balloons()
 
 # ----------------- VISUALIZATION -----------------
 elif selected == "📊 Visualization":
@@ -199,7 +215,6 @@ elif selected == "🤖 Modeling":
     if "df" in st.session_state:
         df = st.session_state["df"]
 
-        # Validation
         missing = [col for col in required_columns if col not in df.columns]
         if missing:
             st.error(f"Missing required columns: {', '.join(missing)}")
@@ -212,7 +227,6 @@ elif selected == "🤖 Modeling":
         else:
             model_name = st.selectbox("Select Model", ["Random Forest", "Decision Tree", "KNN", "SVM", "Linear Regression"])
 
-        # Hyperparameter tuning
         st.subheader("⚙️ Model Hyperparameters")
         params = {}
         if model_name == "Random Forest":
@@ -256,9 +270,11 @@ elif selected == "🤖 Modeling":
                     "Linear Regression": LinearRegression()
                 }[name]
 
-        model = get_model(model_name, task, params)
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
+        with st.spinner("🧠 Training model..."):
+            time.sleep(1.5)
+            model = get_model(model_name, task, params)
+            model.fit(X_train, y_train)
+            y_pred = model.predict(X_test)
 
         st.session_state["results"] = {
             "task": task,
@@ -271,8 +287,8 @@ elif selected == "🤖 Modeling":
 
         joblib.dump(model, 'soil_model.pkl')
         st.download_button("⬇️ Download Trained Model", data=open('soil_model.pkl','rb'), file_name='soil_model.pkl')
-
         st.success("✅ Model training completed! Go to 📈 Results to view performance.")
+        st.snow()
     else:
         st.info("Please upload data first.")
 
@@ -301,7 +317,7 @@ elif selected == "📈 Results":
             st.text("Classification Report:")
             st.text(classification_report(y_test, y_pred))
 
-        else:  # Regression
+        else:
             rmse = mean_squared_error(y_test, y_pred, squared=False)
             mae = mean_absolute_error(y_test, y_pred)
             r2 = r2_score(y_test, y_pred)
@@ -321,7 +337,6 @@ elif selected == "📈 Results":
             importance = pd.Series(model.feature_importances_, index=X_columns).sort_values(ascending=True)
             fig = px.bar(importance, orientation='h', title="Feature Importance", color=importance, color_continuous_scale='Greens')
             st.plotly_chart(fig, use_container_width=True)
-
     else:
         st.info("Please run a model first.")
 
