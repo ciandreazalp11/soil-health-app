@@ -7,15 +7,18 @@ from streamlit_option_menu import option_menu
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.metrics import accuracy_score, classification_report, mean_squared_error, r2_score
-from io import BytesIO
+from sklearn.metrics import accuracy_score, classification_report, mean_squared_error, mean_absolute_error, r2_score
 import joblib
 import time
 
 # ----------------- PAGE CONFIG -----------------
-st.set_page_config(page_title="🌱 Soil Health ML App", layout="wide", page_icon="🌿")
+st.set_page_config(
+    page_title="🌱 Soil Health ML App",
+    layout="wide",
+    page_icon="🌿"
+)
 
-# ----------------- STYLES -----------------
+# ----------------- THEME CONFIG -----------------
 st.markdown("""
 <style>
 .stApp {
@@ -31,10 +34,30 @@ section[data-testid="stSidebar"] {
 section[data-testid="stSidebar"] * {
     color: #d9ead3 !important;
 }
+div[data-testid="stSidebarNav"] a:hover {
+    background-color: rgba(90,143,41,0.3) !important;
+    transform: scale(1.05);
+    transition: all 0.3s ease-in-out;
+    border-radius: 8px;
+}
 h1, h2, h3 {
     color: #cce5cc;
+    font-family: 'Trebuchet MS', sans-serif;
     font-weight: bold;
     text-shadow: 0px 0px 6px rgba(100,255,100,0.4);
+}
+[data-testid="stMetric"] {
+    background: rgba(30, 60, 30, 0.65);
+    color: #f0f0f0;
+    padding: 15px;
+    border-radius: 15px;
+    box-shadow: 0px 8px 20px rgba(0,0,0,0.7);
+    backdrop-filter: blur(10px);
+    text-align: center;
+    transition: transform 0.3s ease;
+}
+[data-testid="stMetric"]:hover {
+    transform: translateY(-5px) scale(1.02);
 }
 .stButton button {
     background: linear-gradient(135deg, #5a8f29, #9acd32);
@@ -66,15 +89,15 @@ h1, h2, h3 {
 # ----------------- SIDEBAR MENU -----------------
 with st.sidebar:
     selected = option_menu(
-        "🌱 Soil Health App",
-        ["📂 Upload Data", "📊 Visualization", "🤖 Modeling", "📈 Results", "🌿 Insights"],
+        "🌱 Soil Health App", 
+        ["📂 Upload Data", "📊 Visualization", "🤖 Modeling", "📈 Results", "🌿 Insights"], 
         icons=["cloud-upload", "bar-chart", "robot", "graph-up", "lightbulb"],
-        menu_icon="list",
+        menu_icon="list", 
         default_index=0,
         styles={
             "container": {"padding": "5!important", "background-color": "#111c11"},
             "icon": {"color": "#9acd32", "font-size": "20px"},
-            "nav-link": {"color": "#d9ead3", "font-size": "16px"},
+            "nav-link": {"color":"#d9ead3","font-size": "16px"},
             "nav-link-selected": {"background-color": "#5a8f29"},
         }
     )
@@ -89,16 +112,6 @@ column_mapping = {
     'Organic Matter': ['Organic Matter', 'OM', 'oc']
 }
 required_columns = list(column_mapping.keys())
-
-# ----------------- PREPROCESS FUNCTION -----------------
-def preprocess_data(df):
-    df = df.replace(["", " ", "NA", "NaN", None], np.nan)
-    for col in df.columns:
-        if df[col].dtype in [np.float64, np.int64]:
-            df[col].fillna(df[col].mean(), inplace=True)
-        else:
-            df[col].fillna(df[col].mode()[0], inplace=True)
-    return df
 
 # ----------------- UPLOAD DATA -----------------
 if selected == "📂 Upload Data":
@@ -121,22 +134,30 @@ if selected == "📂 Upload Data":
                     df.rename(columns=renamed, inplace=True)
                     df = df[[col for col in required_columns if col in df.columns]]
                     df.drop_duplicates(inplace=True)
-                    df = preprocess_data(df)
                     cleaned_dfs.append(df)
-                    st.success(f"✅ Processed: {file.name} ({df.shape[0]} rows)")
+                    st.success(f"✅ Loaded: {file.name} ({df.shape[0]} rows)")
                 except Exception as e:
                     st.warning(f"⚠️ Skipped {file.name}: {e}")
 
         if cleaned_dfs:
             df = pd.concat(cleaned_dfs, ignore_index=True)
+            df.replace(r'^\s*$', np.nan, regex=True, inplace=True)
+            # Fill missing numeric and categorical
+            for col in df.columns:
+                if df[col].dtype in [np.float64, np.int64]:
+                    df[col].fillna(df[col].mean(), inplace=True)
+                else:
+                    df[col].fillna(df[col].mode()[0] if not df[col].mode().empty else "Unknown", inplace=True)
+            df.dropna(how='all', inplace=True)
+
             st.session_state["df"] = df
             st.subheader("🔗 Final Preprocessed Dataset")
             st.dataframe(df.head())
 
-            csv = df.to_csv(index=False).encode('utf-8')
+            csv_preprocessed = df.to_csv(index=False).encode('utf-8')
             st.download_button(
-                label="⬇️ Download Preprocessed Dataset (CSV)",
-                data=csv,
+                label="⬇️ Download Final Preprocessed Dataset (CSV)",
+                data=csv_preprocessed,
                 file_name="final_preprocessed_soil_dataset.csv",
                 mime="text/csv"
             )
@@ -149,37 +170,33 @@ elif selected == "📊 Visualization":
         df = st.session_state["df"]
         feature = st.selectbox("Select a feature", df.columns)
         fig = px.histogram(df, x=feature, nbins=20, marginal="box", color_discrete_sequence=["#9acd32"])
-        fig.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)")
+        fig.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig, use_container_width=True)
 
         st.subheader("🌐 Correlation Heatmap")
         corr = df.corr(numeric_only=True)
         fig = px.imshow(corr, text_auto=True, color_continuous_scale="Greens")
-        fig.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)")
+        fig.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Please upload data first.")
 
 # ----------------- MODELING -----------------
 elif selected == "🤖 Modeling":
-    st.title("🤖 Modeling & Prediction (Random Forest Only)")
-    if "df" not in st.session_state:
-        st.warning("Please upload and preprocess data first.")
-    else:
+    st.title("🤖 Modeling & Prediction")
+    if "df" in st.session_state:
         df = st.session_state["df"]
         task = st.radio("🧠 Prediction Task", ["Classification", "Regression"])
 
         if task == "Classification":
-            target_col = st.selectbox("Select Target Column", df.columns)
-            df[target_col] = pd.qcut(df[target_col], q=3, labels=['Low', 'Moderate', 'High'])
-            X = df.drop(columns=[target_col])
-            y = df[target_col]
-            model = RandomForestClassifier(random_state=42)
+            df['Fertility_Level'] = pd.qcut(df['Nitrogen'], q=3, labels=['Low', 'Moderate', 'High'])
+            X = df.drop(columns=['Nitrogen', 'Fertility_Level'])
+            y = df['Fertility_Level']
+            model = RandomForestClassifier(random_state=42, n_estimators=150, max_depth=10)
         else:
-            target_col = st.selectbox("Select Target Column", df.columns)
-            X = df.drop(columns=[target_col])
-            y = df[target_col]
-            model = RandomForestRegressor(random_state=42)
+            X = df.drop(columns=['Nitrogen'])
+            y = df['Nitrogen']
+            model = RandomForestRegressor(random_state=42, n_estimators=150, max_depth=10)
 
         X = X.select_dtypes(include=[np.number])
         scaler = MinMaxScaler()
@@ -195,76 +212,72 @@ elif selected == "🤖 Modeling":
             "task": task,
             "y_test": y_test.tolist(),
             "y_pred": y_pred.tolist(),
-            "model": model,
-            "target": target_col
+            "model": model
         }
-
         joblib.dump(model, 'soil_model.pkl')
-        st.download_button("⬇️ Download Trained Model", data=open('soil_model.pkl', 'rb'), file_name='soil_model.pkl')
+        st.download_button("⬇️ Download Trained Model", data=open('soil_model.pkl','rb'), file_name='soil_model.pkl')
         st.success("✅ Model training completed! Go to 📈 Results to view performance.")
         st.snow()
+    else:
+        st.info("Please upload data first.")
 
 # ----------------- RESULTS -----------------
 elif selected == "📈 Results":
-    st.title("📈 Model Results & Soil Health Insights")
-    if "results" not in st.session_state:
-        st.info("Please train a model first.")
-    else:
+    st.title("📈 Model Results")
+    if "results" in st.session_state:
         results = st.session_state["results"]
         task = results["task"]
+        model = results["model"]
         y_test = np.array(results["y_test"])
         y_pred = np.array(results["y_pred"])
 
         if task == "Classification":
-            acc = accuracy_score(y_test, y_pred)
-            st.metric("Accuracy", f"{acc:.2f}")
-            color = "green" if acc > 0.8 else "orange" if acc > 0.6 else "red"
-            fig = go.Figure(go.Indicator(
-                mode="gauge+number",
-                value=acc,
-                gauge={'axis': {'range': [0, 1]}, 'bar': {'color': color}},
-                title={'text': "Accuracy Gauge"}
-            ))
-            fig.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)")
-            st.plotly_chart(fig, use_container_width=True)
-            st.text("Classification Report:")
-            st.text(classification_report(y_test, y_pred))
+            try:
+                acc = accuracy_score(y_test, y_pred)
+                st.metric("Accuracy", f"{acc:.2f}")
+                if acc >= 0.8:
+                    st.success("🌿 Excellent Prediction: Soil condition predictions are highly reliable.")
+                elif acc >= 0.6:
+                    st.warning("🌾 Moderate Prediction: Model performance is acceptable but could improve.")
+                else:
+                    st.error("🌱 Weak Prediction: Predictions may not be reliable, check data quality.")
 
-            # Soil Health Interpretation
-            pred_labels, counts = np.unique(y_pred, return_counts=True)
-            dominant = pred_labels[np.argmax(counts)]
-            if dominant == 'High':
-                st.success("🌿 Soil Health: GOOD — High fertility and nutrients present.")
-            elif dominant == 'Moderate':
-                st.warning("⚠️ Soil Health: MODERATE — Some nutrient imbalance detected.")
-            else:
-                st.error("🚫 Soil Health: POOR — Low fertility, corrective measures needed.")
+                st.text("Classification Report:")
+                st.text(classification_report(y_test, y_pred))
+            except Exception as e:
+                st.error(f"⚠️ Error evaluating classification: {e}")
 
         else:
-            rmse = mean_squared_error(y_test, y_pred, squared=False)
-            r2 = r2_score(y_test, y_pred)
-            st.metric("RMSE", f"{rmse:.2f}")
-            st.metric("R² Score", f"{r2:.2f}")
-            fig = px.scatter(x=y_test, y=y_pred, labels={"x": "Actual", "y": "Predicted"}, color_discrete_sequence=["#9acd32"])
-            fig.add_trace(go.Scatter(x=[np.min(y_test), np.max(y_test)], y=[np.min(y_test), np.max(y_test)],
-                                     mode="lines", name="Ideal", line=dict(color="red", dash="dash")))
-            fig.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)")
-            st.plotly_chart(fig, use_container_width=True)
-            avg_pred = np.mean(y_pred)
-            st.markdown(f"**Average Predicted Nutrient Value:** {avg_pred:.2f}")
-            if avg_pred >= np.percentile(y_test, 66):
-                st.success("🌿 Soil Health: GOOD — High nutrient level.")
-            elif avg_pred >= np.percentile(y_test, 33):
-                st.warning("⚠️ Soil Health: MODERATE — Medium nutrient level.")
-            else:
-                st.error("🚫 Soil Health: POOR — Low nutrient level detected.")
+            try:
+                # Safe RMSE calculation for all sklearn versions
+                try:
+                    rmse = mean_squared_error(y_test, y_pred, squared=False)
+                except TypeError:
+                    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+                mae = mean_absolute_error(y_test, y_pred)
+                r2 = r2_score(y_test, y_pred)
+
+                col1, col2, col3 = st.columns(3)
+                col1.metric("RMSE", f"{rmse:.2f}")
+                col2.metric("MAE", f"{mae:.2f}")
+                col3.metric("R²", f"{r2:.2f}")
+
+                if r2 >= 0.8:
+                    st.success("🌿 Excellent Fit: Model explains most of the soil health variation.")
+                elif r2 >= 0.6:
+                    st.warning("🌾 Moderate Fit: Model is okay but can be tuned.")
+                else:
+                    st.error("🌱 Poor Fit: Consider improving dataset quality or parameters.")
+            except Exception as e:
+                st.error(f"⚠️ Error evaluating regression: {e}")
+
+    else:
+        st.info("Please run a model first.")
 
 # ----------------- INSIGHTS -----------------
 elif selected == "🌿 Insights":
-    st.title("🌿 Soil Health Insights")
-    if "df" not in st.session_state:
-        st.info("Upload and process data first.")
-    else:
+    st.title("🌿 Soil Health Insights & Recommendations")
+    if "df" in st.session_state:
         df = st.session_state["df"]
         avg_ph = df["pH"].mean()
         st.markdown(f"**Average Soil pH:** {avg_ph:.2f}")
@@ -274,6 +287,16 @@ elif selected == "🌿 Insights":
             st.info("ℹ️ Soil is alkaline — add organic matter or sulfur.")
         else:
             st.success("✅ Soil pH is within optimal range (5.5–7.5).")
+
+        avg_n = df["Nitrogen"].mean()
+        if avg_n < df["Nitrogen"].quantile(0.33):
+            st.warning("Low Nitrogen — apply nitrogen-rich fertilizers.")
+        elif avg_n > df["Nitrogen"].quantile(0.67):
+            st.success("Good Nitrogen Level — healthy soil nutrient balance.")
+        else:
+            st.info("Moderate Nitrogen — acceptable but monitor regularly.")
+    else:
+        st.info("Upload a dataset to generate soil insights.")
 
 # ----------------- FOOTER -----------------
 st.markdown("<div class='footer'>👨‍💻 Developed by <span>Andre Plaza</span> & <span>Rica Baliling</span> | 🌱 Capstone Project</div>", unsafe_allow_html=True)
