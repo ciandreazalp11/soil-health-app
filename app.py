@@ -1,4 +1,4 @@
-# app_a.py
+# app_b.py
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -13,37 +13,33 @@ from io import BytesIO
 import joblib
 import time
 
-# ----------------- PAGE CONFIG -----------------
 st.set_page_config(
-    page_title="🌱 Soil Health ML App — A (Glassmorphic)",
+    page_title="🌱 Soil Health ML App — B (Neon)",
     layout="wide",
     page_icon="🌿"
 )
 
-# ----------------- GLASSMORPHIC THEME (UI ONLY) -----------------
+# ----------------- NEON THEME (UI ONLY) -----------------
 st.markdown("""
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap" rel="stylesheet">
 <style>
-.stApp { font-family: 'Inter', sans-serif; color: #e9f6e9; background: linear-gradient(180deg,#0b120b,#112112); min-height:100vh; }
-section[data-testid="stSidebar"] { background: rgba(18,26,18,0.85) !important; border-radius:12px; padding:16px; box-shadow: 0 6px 30px rgba(0,0,0,0.6); }
-div[data-testid="stSidebarNav"] a { color:#dfeee0 !important; border-radius:8px; padding:8px 10px; }
-div[data-testid="stSidebarNav"] a:hover { background: rgba(90,143,41,0.10) !important; transform: translateX(4px); transition: all .18s; }
-h1,h2,h3 { color:#dff7d9; text-shadow:0 2px 8px rgba(0,0,0,0.6); }
-.stButton button { background: linear-gradient(135deg,#6fae3a,#9bd24a) !important; color: #012a00 !important; border-radius:10px; padding:0.5rem 1rem; font-weight:600; box-shadow: 0 8px 24px rgba(0,0,0,0.45); }
-.stButton button:hover { transform: translateY(-3px); box-shadow: 0 12px 36px rgba(0,0,0,0.6); }
-[data-testid="stMetric"] { background: rgba(255,255,255,0.03); border-radius:12px; padding:12px; box-shadow: 0 8px 20px rgba(0,0,0,0.45); }
-.stDataFrame, .stTable { border-radius:12px; overflow:hidden; box-shadow: 0 8px 20px rgba(0,0,0,0.45); }
-.legend { background: linear-gradient(90deg, rgba(20,40,20,0.5), rgba(20,40,20,0.2)); border-radius:10px; padding:8px; color:#e8f6e8; }
-.header-deco { position:absolute; right:28px; top:8px; width:64px; height:64px; opacity:0.9; animation: bob 6s ease-in-out infinite; }
-@keyframes bob { 0% {transform: translateY(0)} 50% {transform: translateY(-8px)} 100% {transform: translateY(0)} }
-.footer { text-align:center; color:#bcd9b2; font-size:13px; padding:10px; margin-top:16px; }
+.stApp { font-family: 'Montserrat', sans-serif; color:#e6f7ff; min-height:100vh; background: linear-gradient(120deg, #071e1f 0%, #0b2a2b 40%, #07112a 100%); background-attachment: fixed; }
+section[data-testid="stSidebar"] { background: rgba(5,10,15,0.9) !important; border-radius:12px; padding:18px; box-shadow: 0 12px 40px rgba(0,0,0,0.6); }
+div[data-testid="stSidebarNav"] a { color:#bfefff !important; border-radius:8px; padding:10px; }
+div[data-testid="stSidebarNav"] a:hover { background: rgba(67,97,238,0.06) !important; transform: translateX(6px); transition: all .18s; }
+h1,h2,h3 { color:#a8ffea; text-shadow: 0 0 10px rgba(0,255,200,0.12); }
+.stButton button { background: linear-gradient(90deg,#00f5d4,#00b4ff) !important; color:#031017 !important; border-radius:12px; padding:0.55rem 1rem; font-weight:700; box-shadow: 0 12px 34px rgba(0,180,255,0.12); }
+.stButton button:hover { transform: scale(1.04); box-shadow: 0 18px 46px rgba(0,180,255,0.2); }
+.legend { background: linear-gradient(90deg, rgba(10,20,40,0.6), rgba(10,20,40,0.4)); border-radius:12px; padding:10px; color:#e6fbff; }
+.header-glow { position:absolute; right:20px; top:12px; width:78px; height:78px; opacity:0.95; animation: shimmer 8s linear infinite; }
+@keyframes shimmer { 0% { transform: rotate(0deg) translateY(0) } 50% { transform: rotate(6deg) translateY(-10px) } 100% { transform: rotate(0deg) translateY(0) } }
+.footer { text-align:center; color:#bdeeff; font-size:13px; padding:10px; margin-top:18px; }
 </style>
 
-<!-- decorative svg -->
 <div style="position:relative;">
-  <svg class="header-deco" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-    <path fill="#9bd24a" d="M12 44c6-12 24-24 40-28-4 18-18 34-34 34-1 0-3-1-6-6z" opacity="0.95"/>
-    <path fill="#6fae3a" d="M50 14c-10 6-24 18-34 30 12-6 28-18 34-30z" opacity="0.12"/>
+  <svg class="header-glow" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="32" cy="32" r="28" fill="#00f5d4" opacity="0.08"/>
+    <path fill="#00b4ff" d="M20 44c6-12 24-24 40-28-4 18-18 34-34 34-1 0-3-1-6-6z" opacity="0.28"/>
   </svg>
 </div>
 """, unsafe_allow_html=True)
@@ -73,7 +69,6 @@ column_mapping = {
 }
 required_columns = list(column_mapping.keys())
 
-# Initialize session_state keys we will use (safe)
 if "df" not in st.session_state:
     st.session_state["df"] = None
 if "results" not in st.session_state:
@@ -83,7 +78,6 @@ if "model" not in st.session_state:
 if "y_train_quantiles" not in st.session_state:
     st.session_state["y_train_quantiles"] = None
 
-# ----------------- HELPERS -----------------
 def safe_to_numeric_columns(df, cols):
     numeric_found = []
     for c in cols:
@@ -181,12 +175,12 @@ elif selected == "📊 Visualization":
             st.warning("No numeric columns available for plotting.")
         else:
             feature = st.selectbox("Select a numeric feature", numeric_cols)
-            fig = px.histogram(df, x=feature, nbins=30, marginal="box", color_discrete_sequence=["#9acd32"])
+            fig = px.histogram(df, x=feature, nbins=30, marginal="box", color_discrete_sequence=["#00f5d4"])
             fig.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)")
             st.plotly_chart(fig, use_container_width=True)
             st.subheader("🌐 Correlation Heatmap")
             corr = df.corr(numeric_only=True)
-            fig = px.imshow(corr, text_auto=True, color_continuous_scale="Greens")
+            fig = px.imshow(corr, text_auto=True, color_continuous_scale="Blues")
             fig.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)")
             st.plotly_chart(fig, use_container_width=True)
     else:
@@ -291,8 +285,8 @@ elif selected == "📈 Results":
                 col1, col2 = st.columns(2)
                 col1.metric("RMSE", f"{rmse:.2f}")
                 col2.metric("R² Score", f"{r2:.2f}")
-                fig = px.scatter(x=y_test, y=y_pred, labels={"x": "Actual", "y": "Predicted"}, color_discrete_sequence=["#9acd32"])
-                fig.add_trace(go.Scatter(x=[np.min(y_test), np.max(y_test)], y=[np.min(y_test), np.max(y_test)], mode="lines", name="Ideal", line=dict(color="red", dash="dash")))
+                fig = px.scatter(x=y_test, y=y_pred, labels={"x": "Actual", "y": "Predicted"}, color_discrete_sequence=["#00f5d4"])
+                fig.add_trace(go.Scatter(x=[np.min(y_test), np.max(y_test)], y=[np.min(y_test), np.max(y_test)], mode="lines", name="Ideal", line=dict(color="magenta", dash="dash")))
                 fig.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)")
                 st.plotly_chart(fig, use_container_width=True)
                 q = st.session_state.get("y_train_quantiles")
