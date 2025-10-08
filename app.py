@@ -166,6 +166,15 @@ if selected == "📂 Upload Data":
             st.dataframe(df.head())
             st.session_state["df"] = df
 
+            # ✅ Added: Download merged and cleaned dataset
+            csv = df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="⬇️ Download Cleaned & Merged Dataset (CSV)",
+                data=csv,
+                file_name="cleaned_merged_soil_dataset.csv",
+                mime="text/csv"
+            )
+
 # ----------------- VISUALIZATION -----------------
 elif selected == "📊 Visualization":
     st.title("📊 Soil Data Visualization")
@@ -306,7 +315,6 @@ elif selected == "📈 Results":
             fig.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)")
             st.plotly_chart(fig, use_container_width=True)
 
-        # Feature Importance
         if hasattr(model, "feature_importances_"):
             st.subheader("🌾 Feature Importance")
             X_columns = results["X_columns"]
