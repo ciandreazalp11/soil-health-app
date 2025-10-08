@@ -283,7 +283,7 @@ elif selected == "📊 Visualization":
 
 # ----------------- MODELING (Random Forest only) -----------------
 elif selected == "🤖 Modeling":
-    st.title("🤖 Modeling & Prediction (Random Forest only)")
+    st.title("🤖 Modeling & Prediction Using Random Forest")
 
     if "df" not in st.session_state or st.session_state["df"] is None:
         st.info("Please upload data first.")
@@ -474,3 +474,4 @@ elif selected == "🌿 Insights":
 
 # ----------------- FOOTER -----------------
 st.markdown("<div class='footer'>👨‍💻 Developed by <span>Andre Plaza</span> & <span>Rica Baliling</span> | 🌱 Capstone Project</div>", unsafe_allow_html=True)
+
