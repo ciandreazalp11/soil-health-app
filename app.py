@@ -19,73 +19,147 @@ st.set_page_config(
     page_icon="🌿"
 )
 
-# ----------------- CUSTOM CSS (kept as original style) -----------------
+# ----------------- ENHANCED VISUAL STYLES (only UI changes) -----------------
 st.markdown("""
-    <style>
-    .stApp {
-        background: linear-gradient(160deg, #0d1b0d, #1a2e1a, #253524);
-        color: #e6f0e6;
-    }
-    section[data-testid="stSidebar"] {
-        background-color: #111c11 !important;
-        padding: 10px;
-        border-radius: 12px;
-        color: #d9ead3;
-    }
-    section[data-testid="stSidebar"] * {
-        color: #d9ead3 !important;
-        font-weight: 500;
-    }
-    div[data-testid="stSidebarNav"] a:hover {
-        background-color: rgba(90,143,41,0.3) !important;
-        transform: scale(1.05);
-        transition: all 0.3s ease-in-out;
-        border-radius: 8px;
-    }
-    h1, h2, h3 {
-        color: #cce5cc;
-        font-family: 'Trebuchet MS', sans-serif;
-        font-weight: bold;
-    }
-    .stButton button {
-        background: linear-gradient(135deg, #5a8f29, #9acd32);
-        color: white;
-        border-radius: 8px;
-        border: none;
-        padding: 0.6em 1.2em;
-        font-weight: bold;
-        transition: all 0.3s ease;
-    }
-    .stButton button:hover {
-        transform: scale(1.05);
-        box-shadow: 0px 4px 12px rgba(154,205,50,0.6);
-    }
-    .footer {
-        text-align: center;
-        color: #bcd9b2;
-        font-size: 15px;
-        padding: 10px;
-        margin-top: 20px;
-    }
-    .footer span {
-        font-weight: bold;
-        color: #9acd32;
-    }
-    .legend {
-        background: rgba(20,40,20,0.7);
-        border-radius: 12px;
-        padding: 10px;
-        margin-top: 15px;
-        font-size: 14px;
-    }
-    .legend span {
-        display: inline-block;
-        width: 15px;
-        height: 15px;
-        margin-right: 8px;
-        border-radius: 4px;
-    }
-    </style>
+<!-- Google Font -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+<style>
+/* Page base */
+.stApp {
+    font-family: 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    color: #e6f0e6;
+    min-height: 100vh;
+    /* animated subtle radial gradient background */
+    background:
+      radial-gradient(circle at 10% 20%, rgba(35,85,35,0.18), transparent 15%),
+      radial-gradient(circle at 90% 80%, rgba(50,120,50,0.12), transparent 12%),
+      linear-gradient(160deg, #09120a 0%, #122612 40%, #1e3a1e 100%);
+    background-attachment: fixed;
+}
+
+/* Floating leaf decorative element in header (non-invasive) */
+.header-deco {
+    position: absolute;
+    right: 30px;
+    top: 18px;
+    width: 56px;
+    height: 56px;
+    pointer-events: none;
+    opacity: 0.9;
+    transform-origin: center;
+    animation: floaty 6s ease-in-out infinite;
+}
+@keyframes floaty {
+  0% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-8px) rotate(6deg); }
+  100% { transform: translateY(0) rotate(0deg); }
+}
+
+/* Sidebar styling */
+section[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, rgba(10,20,10,0.9), rgba(8,18,8,0.95)) !important;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+    border-radius: 12px;
+    padding: 18px;
+    margin: 10px 8px 10px 10px;
+}
+section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2, section[data-testid="stSidebar"] h3 {
+    color: #d9ead3 !important;
+}
+[data-testid="stSidebar"] .css-1d391kg { padding-top: 6px; }
+
+/* Sidebar nav links */
+div[data-testid="stSidebarNav"] a {
+    color: #d9ead3 !important;
+    border-radius: 8px;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+}
+div[data-testid="stSidebarNav"] a:hover {
+    background: rgba(90,143,41,0.12) !important;
+    transform: translateX(4px);
+    transition: all 0.18s ease;
+}
+
+/* Headings */
+h1, h2, h3 {
+    color: #cce5cc;
+    font-weight: 700;
+    margin: 6px 0;
+    text-shadow: 0 2px 14px rgba(0,0,0,0.45);
+}
+
+/* Card/metric look */
+[data-testid="stMetric"] {
+    background: linear-gradient(135deg, rgba(30,60,30,0.55), rgba(20,40,20,0.35));
+    padding: 12px 14px;
+    border-radius: 12px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+}
+
+/* Buttons */
+.stButton button {
+    background: linear-gradient(135deg, #5a8f29, #9acd32) !important;
+    color: white !important;
+    border-radius: 10px;
+    padding: 0.55rem 1rem;
+    font-weight: 600;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.stButton button:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+}
+
+/* DataFrame styling container */
+.stDataFrame, .stTable {
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+}
+
+/* Legend boxes */
+.legend {
+    background: linear-gradient(90deg, rgba(20,40,20,0.6), rgba(20,40,20,0.3));
+    border-radius: 10px;
+    padding: 10px;
+    font-size: 14px;
+    color: #eaf6e8;
+}
+
+/* Footer */
+.footer {
+    text-align: center;
+    color: #bcd9b2;
+    font-size: 13px;
+    padding: 10px;
+    margin-top: 22px;
+}
+
+/* Make charts pop a little */
+.plotly-graph-div {
+    border-radius: 10px;
+    padding: 6px;
+}
+
+/* Responsive tweaks */
+@media (max-width: 768px) {
+    .header-deco { display: none; }
+}
+</style>
+""", unsafe_allow_html=True)
+
+# decorative floating leaf (pure CSS svg) inserted at top-right of page
+st.markdown("""
+<div style="position:relative;">
+  <svg class="header-deco" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+    <path fill="#9acd32" d="M12 44c6-12 24-24 40-28-4 18-18 34-34 34-1 0-3-1-6-6z" opacity="0.95"/>
+    <path fill="#5a8f29" d="M50 14c-10 6-24 18-34 30 12-6 28-18 34-30z" opacity="0.12"/>
+  </svg>
+</div>
 """, unsafe_allow_html=True)
 
 # ----------------- SIDEBAR MENU -----------------
