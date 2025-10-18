@@ -163,7 +163,7 @@ if selected == "📂 Upload Data":
             st.dataframe(df.head())
             download_df_button(df, filename="final_preprocessed_soil_dataset.csv", label="⬇️ Download Cleaned & Preprocessed Data")
             st.success("✨ Auto preprocessing applied and dataset saved to session (used for Visualization/Modeling/Results).")
-            st.balloons()
+            
 
 # ----------------- VISUALIZATION -----------------
 elif selected == "📊 Visualization":
@@ -327,3 +327,4 @@ elif selected == "🌿 Insights":
 
 # ----------------- FOOTER -----------------
 st.markdown("<div class='footer'>👨‍💻 Developed by <span>Andre Plaza</span> & <span>Rica Baliling</span> | 🌱 Capstone Project</div>", unsafe_allow_html=True)
+
