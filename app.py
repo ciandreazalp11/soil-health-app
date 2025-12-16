@@ -1189,22 +1189,78 @@ elif page == "📊 Visualization":
                             '''
                             m.get_root().html.add_child(folium.Element(legend_html))
 
-                        else:
-                            # Regression mode: render a true heatmap using normalized predictions (0–1)
-                            min_p = float(np.nanmin(df_geo["RF_Prediction"]))
-                            max_p = float(np.nanmax(df_geo["RF_Prediction"]))
-                            if max_p > min_p:
-                                df_geo["intensity"] = (df_geo["RF_Prediction"] - min_p) / (max_p - min_p)
-                            else:
-                                df_geo["intensity"] = 0.5
+else:
+    # Regression mode: convert numeric predictions into sustainability classes
+    # (Poor / Moderate / High) using terciles, then plot dots (no heatmap).
+    p = pd.to_numeric(df_geo["RF_Prediction"], errors="coerce")
+    q1 = float(p.quantile(1/3))
+    q2 = float(p.quantile(2/3))
 
-                            heat_data = df_geo[["Latitude", "Longitude", "intensity"]].values.tolist()
-                            HeatMap(
-                                heat_data,
-                                radius=18,
-                                blur=15,
-                                max_zoom=12,
-                            ).add_to(m)
+    def _reg_to_class(v):
+        try:
+            v = float(v)
+        except Exception:
+            return "Poor"
+        if v >= q2:
+            return "High"
+        if v >= q1:
+            return "Moderate"
+        return "Poor"
+
+    df_geo["Soil_Health_Class"] = df_geo["RF_Prediction"].apply(_reg_to_class)
+
+    color_map = {
+        "High": "#2ecc71",      # green
+        "Moderate": "#f39c12",  # orange
+        "Poor": "#e74c3c",      # red
+    }
+
+    for _, row in df_geo.iterrows():
+        label = row["Soil_Health_Class"]
+        folium.CircleMarker(
+            location=[float(row["Latitude"]), float(row["Longitude"])],
+            radius=6,
+            color=color_map.get(label, "#e74c3c"),
+            fill=True,
+            fill_color=color_map.get(label, "#e74c3c"),
+            fill_opacity=0.9,
+            popup=folium.Popup(
+                f"<b>Soil Health:</b> {label}<br>"
+                f"<b>Prediction:</b> {row['RF_Prediction']}",
+                max_width=250,
+            ),
+        ).add_to(m)
+
+    # Add legend (bottom-left)
+    legend_html = '''
+        <div style="
+            position: fixed;
+            bottom: 35px;
+            left: 20px;
+            z-index: 9999;
+            background: rgba(0,0,0,0.75);
+            color: white;
+            padding: 10px 12px;
+            border-radius: 10px;
+            font-size: 14px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+        ">
+          <div style="font-weight: 700; margin-bottom: 6px;">Soil Health (Sustainability)</div>
+          <div style="display:flex; align-items:center; gap:8px; margin:4px 0;">
+            <span style="display:inline-block; width:12px; height:12px; background:#2ecc71; border-radius:3px;"></span>
+            <span>High</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; margin:4px 0;">
+            <span style="display:inline-block; width:12px; height:12px; background:#f39c12; border-radius:3px;"></span>
+            <span>Moderate</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; margin:4px 0;">
+            <span style="display:inline-block; width:12px; height:12px; background:#e74c3c; border-radius:3px;"></span>
+            <span>Poor</span>
+          </div>
+        </div>
+    '''
+    m.get_root().html.add_child(folium.Element(legend_html))
 
                         folium.LayerControl().add_to(m)
                         st_folium(m, width=1024, height=520)
