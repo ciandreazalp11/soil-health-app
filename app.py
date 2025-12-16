@@ -5,8 +5,6 @@ import plotly.express as px
 import folium
 from folium.plugins import HeatMap, FastMarkerCluster
 from streamlit_folium import st_folium
-import geopandas as gpd
-from shapely.geometry import Point, Polygon, box
 from streamlit_option_menu import option_menu
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
@@ -30,31 +28,6 @@ import warnings
 import re
 
 warnings.filterwarnings("ignore", category=UserWarning)
-
-
-@st.cache_resource
-def _get_mindanao_land_poly(min_lon: float, min_lat: float, max_lon: float, max_lat: float):
-    """Return a *land-only* polygon for Mindanao by intersecting PH land geometry with a Mindanao bbox.
-    Uses Natural Earth (bundled with GeoPandas). Cached for performance.
-    """
-    world = gpd.read_file(gpd.datasets.get_path("naturalearth_lowres"))
-    ph = world[world["name"] == "Philippines"].geometry.iloc[0]  # MultiPolygon
-    mind_bbox = box(min_lon, min_lat, max_lon, max_lat)
-    land = ph.intersection(mind_bbox)
-
-    # Keep the largest piece (Mindanao main landmass)
-    if land.geom_type == "MultiPolygon":
-        land = max(land.geoms, key=lambda g: g.area)
-
-    # Slightly shrink to avoid coastal water getting included due to low-res geometry
-    try:
-        land_shrunk = land.buffer(-0.02)
-        if land_shrunk is not None and (not land_shrunk.is_empty):
-            land = land_shrunk
-    except Exception:
-        pass
-
-    return land
 
 st.set_page_config(
     page_title="Machine Learning-Driven Soil Analysis for Sustainable Agriculture System",
@@ -1103,9 +1076,20 @@ elif page == "📊 Visualization":
         if "Nitrogen" in df.columns and "Fertility_Level" not in df.columns:
             df["Fertility_Level"] = create_fertility_label(
                 df, col="Nitrogen", q=3
-            )        # ===== NEW: Folium classification hotspot map (RF) with legend (added feature; no other logic changed) =====
+            )        
+        # ===== NEW: Folium classification map (RF) — dots only, strict Mindanao land-safe bounds, with legend =====
         st.subheader("🗺️ Soil Health Classification Map (Random Forest)")
         st.caption("Legend: 🟢 High • 🟠 Moderate • 🔴 Poor. Uses your trained Random Forest predictions.")
+
+        def _filter_mindanao_land_only(df_in: pd.DataFrame) -> pd.DataFrame:
+            """Hard filter to hide points outside Mindanao land-safe area (removes offshore/out-of-region coords)."""
+            df0 = df_in.dropna(subset=["Latitude", "Longitude"]).copy()
+            # Tight Mindanao bounds (intentionally conservative to avoid sea points)
+            df0 = df0[
+                (df0["Latitude"] >= 5.0) & (df0["Latitude"] <= 10.5) &
+                (df0["Longitude"] >= 121.5) & (df0["Longitude"] <= 127.3)
+            ]
+            return df0
 
         if "Latitude" in df.columns and "Longitude" in df.columns:
             model = st.session_state.get("model")
@@ -1125,7 +1109,7 @@ elif page == "📊 Visualization":
                     X_scaled_all = scaler.transform(X_all)
                     preds = model.predict(X_scaled_all)
 
-                    # Determine task mode (classification vs regression)
+                    # Determine task
                     task = None
                     if results and isinstance(results, dict) and "task" in results:
                         task = results["task"]
@@ -1135,216 +1119,96 @@ elif page == "📊 Visualization":
                     df_rf = df.copy()
                     df_rf["RF_Prediction"] = preds
 
-                    # Prepare base map
-                    df_geo = df_rf.dropna(subset=["Latitude", "Longitude"]).copy()
-                    # Mindanao-only filter (always on): bounding box first (fast), then land-only polygon (best-effort)
-                    MIN_LAT, MAX_LAT = 4.0, 10.8
-                    MIN_LON, MAX_LON = 121.0, 127.9
-                    df_geo = df_geo[
-                        df_geo["Latitude"].between(MIN_LAT, MAX_LAT)
-                        & df_geo["Longitude"].between(MIN_LON, MAX_LON)
-                    ].copy()
+                    # Convert predictions to Sustainability classes
+                    if str(task).lower().startswith("class"):
+                        def _to_sustainability(v):
+                            s = str(v).strip().lower()
+                            if s in {"high"}:
+                                return "High"
+                            if s in {"moderate", "medium"}:
+                                return "Moderate"
+                            if s in {"poor", "low"}:
+                                return "Poor"
+                            # fallback: keep original if it matches
+                            return str(v)
 
-                    # Strict land-only filter (Mindanao) using PH land geometry
-                    try:
-                        mindanao_land_poly = _get_mindanao_land_poly(MIN_LON, MIN_LAT, MAX_LON, MAX_LAT)
-                        df_geo = df_geo[
-                            df_geo.apply(
-                                lambda r: mindanao_land_poly.contains(
-                                    Point(float(r["Longitude"]), float(r["Latitude"]))
-                                ),
-                                axis=1,
-                            )
-                        ].copy()
-                    except Exception as e:
-                        st.warning(f"Mindanao land filtering failed; showing bbox-filtered points only: {e}")
-                        st.warning(
-                            f"Land-only Mindanao filter could not be applied (showing bounding-box points): {e}"
-                        )
+                        df_rf["Sustainability"] = df_rf["RF_Prediction"].apply(_to_sustainability)
+                    else:
+                        # Regression → bucket into Poor/Moderate/High using terciles
+                        p = pd.to_numeric(df_rf["RF_Prediction"], errors="coerce")
+                        q1, q2 = p.quantile([0.33, 0.66]).values
+                        def _bucket(val):
+                            if pd.isna(val):
+                                return np.nan
+                            if val <= q1:
+                                return "Poor"
+                            if val <= q2:
+                                return "Moderate"
+                            return "High"
+                        df_rf["Sustainability"] = p.apply(_bucket)
 
-                    if not df_geo.empty:
-                        center_lat = float(df_geo["Latitude"].mean())
-                        center_lon = float(df_geo["Longitude"].mean())
+                    # Filter to Mindanao land-safe bounds (hides offshore/outside points)
+                    df_map = _filter_mindanao_land_only(df_rf).dropna(subset=["Sustainability"])
+
+                    if not df_map.empty:
+                        center_lat = float(df_map["Latitude"].mean())
+                        center_lon = float(df_map["Longitude"].mean())
 
                         m = folium.Map(
                             location=[center_lat, center_lon],
-                            zoom_start=6,
+                            zoom_start=7,
                             tiles="CartoDB dark_matter",
-                            max_bounds=True,
+                            control_scale=True,
                         )
-                        # Lock map view to Mindanao bounds (prevents panning outside)
-                        bounds = [[MIN_LAT, MIN_LON], [MAX_LAT, MAX_LON]]
-                        try:
-                            m.fit_bounds(bounds)
-                            m.options["maxBounds"] = bounds
-                            m.options["maxBoundsViscosity"] = 1.0
-                        except Exception:
-                            pass
 
-                        if task == "Classification":
-                            # Map predicted classes to sustainability labels + colors
-                            # Accepts common variants (Low/Poor, Medium/Moderate, High)
-                            def _normalize_label(v):
-                                s = str(v).strip().lower()
-                                if s in ["high", "healthy", "good", "3", "2.0", "2", "excellent"]:
-                                    return "High"
-                                if s in ["moderate", "medium", "average", "2", "1.0", "1"]:
-                                    return "Moderate"
-                                if s in ["low", "poor", "bad", "0", "1", "depleted"]:
-                                    return "Poor"
-                                # fallback: keep original-ish, but treat unknown as Poor
-                                return "Poor"
+                        # Lock map bounds to filtered data extent
+                        min_lat, max_lat = float(df_map["Latitude"].min()), float(df_map["Latitude"].max())
+                        min_lon, max_lon = float(df_map["Longitude"].min()), float(df_map["Longitude"].max())
+                        m.fit_bounds([[min_lat, min_lon], [max_lat, max_lon]])
+                        m.options["maxBounds"] = [[min_lat, min_lon], [max_lat, max_lon]]
 
-                            df_geo["Soil_Health_Class"] = df_geo["RF_Prediction"].apply(_normalize_label)
+                        color_map = {"High": "#2ecc71", "Moderate": "#f39c12", "Poor": "#e74c3c"}
 
-                            color_map = {
-                                "High": "#2ecc71",      # green
-                                "Moderate": "#f39c12",  # orange
-                                "Poor": "#e74c3c",      # red
-                            }
-                            # Plot dots (no clustering) as circle markers colored by class
-                            groups = [
-                                ("High", "#2ecc71"),
-                                ("Moderate", "#f39c12"),
-                                ("Poor", "#e74c3c"),
-                            ]
+                        for _, r in df_map.iterrows():
+                            cls = str(r["Sustainability"]).strip().title()
+                            if cls not in color_map:
+                                # Any unknown labels default to Moderate color
+                                cls = "Moderate"
+                            folium.CircleMarker(
+                                location=[float(r["Latitude"]), float(r["Longitude"])],
+                                radius=4,
+                                color=color_map[cls],
+                                fill=True,
+                                fill_color=color_map[cls],
+                                fill_opacity=0.85,
+                                weight=0,
+                            ).add_to(m)
 
-                            for label, color in groups:
-                                sub = df_geo[df_geo["Soil_Health_Class"] == label]
-                                if sub.empty:
-                                    continue
+                        # Legend (bottom-left)
+                        legend_html = '''
+                        <div style="
+                            position: fixed;
+                            bottom: 30px;
+                            left: 30px;
+                            z-index: 9999;
+                            background: rgba(0,0,0,0.65);
+                            padding: 12px 14px;
+                            border-radius: 10px;
+                            color: white;
+                            font-size: 14px;
+                            line-height: 18px;
+                            ">
+                            <div style="font-weight:700; margin-bottom:6px;">Soil Health (Sustainability)</div>
+                            <div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#2ecc71;margin-right:8px;"></span>High</div>
+                            <div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#f39c12;margin-right:8px;"></span>Moderate</div>
+                            <div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#e74c3c;margin-right:8px;"></span>Poor</div>
+                        </div>
+                        '''
+                        m.get_root().html.add_child(folium.Element(legend_html))
 
-                                for _, r in sub.iterrows():
-                                    folium.CircleMarker(
-                                        location=[float(r["Latitude"]), float(r["Longitude"])],
-                                        radius=5,
-                                        color=color,
-                                        weight=1,
-                                        fill=True,
-                                        fill_color=color,
-                                        fill_opacity=0.85,
-                                    ).add_to(m)
-
-# Add legend (bottom-left)
-
-
-                            legend_html = '''
-                                <div style="
-                                    position: fixed;
-                                    bottom: 35px;
-                                    left: 20px;
-                                    z-index: 9999;
-                                    background: rgba(0,0,0,0.75);
-                                    color: white;
-                                    padding: 10px 12px;
-                                    border-radius: 10px;
-                                    font-size: 14px;
-                                    box-shadow: 0 2px 10px rgba(0,0,0,0.35);
-                                ">
-                                  <div style="font-weight: 700; margin-bottom: 6px;">Soil Health (Sustainability)</div>
-                                  <div style="display:flex; align-items:center; gap:8px; margin:4px 0;">
-                                    <span style="display:inline-block; width:12px; height:12px; background:#2ecc71; border-radius:3px;"></span>
-                                    <span>High</span>
-                                  </div>
-                                  <div style="display:flex; align-items:center; gap:8px; margin:4px 0;">
-                                    <span style="display:inline-block; width:12px; height:12px; background:#f39c12; border-radius:3px;"></span>
-                                    <span>Moderate</span>
-                                  </div>
-                                  <div style="display:flex; align-items:center; gap:8px; margin:4px 0;">
-                                    <span style="display:inline-block; width:12px; height:12px; background:#e74c3c; border-radius:3px;"></span>
-                                    <span>Poor</span>
-                                  </div>
-                                </div>
-                            '''
-                            m.get_root().html.add_child(folium.Element(legend_html))
-
-                        else:
-                            # Regression mode: convert numeric predictions into sustainability classes
-                            # (Poor / Moderate / High) using terciles, then plot dots (no heatmap).
-                            p = pd.to_numeric(df_geo["RF_Prediction"], errors="coerce")
-                            q1 = float(p.quantile(1/3))
-                            q2 = float(p.quantile(2/3))
-
-                            def _reg_to_class(v):
-                                try:
-                                    v = float(v)
-                                except Exception:
-                                    return "Poor"
-                                if v >= q2:
-                                    return "High"
-                                if v >= q1:
-                                    return "Moderate"
-                                return "Poor"
-
-                            df_geo["Soil_Health_Class"] = df_geo["RF_Prediction"].apply(_reg_to_class)
-
-                            color_map = {
-                                "High": "#2ecc71",      # green
-                                "Moderate": "#f39c12",  # orange
-                                "Poor": "#e74c3c",      # red
-                            }
-                            # Plot dots (fast) using FastMarkerCluster by class color
-                            def _to_latlon_list(d):
-                                return d[["Latitude", "Longitude"]].astype(float).values.tolist()
-
-                            groups = [
-                                ("High", "#2ecc71"),
-                                ("Moderate", "#f39c12"),
-                                ("Poor", "#e74c3c"),
-                            ]
-
-                            for label, color in groups:
-                                sub = df_geo[df_geo["Soil_Health_Class"] == label]
-                                if sub.empty:
-                                    continue
-                                data = _to_latlon_list(sub)
-
-                                callback = (
-                                    "function (row) {"
-                                    "return L.circleMarker(new L.LatLng(row[0], row[1]), {"
-                                    f"'radius': 6, 'color': '{color}', 'weight': 1, "
-                                    f"'fillColor': '{color}', 'fillOpacity': 0.85"
-                                    "});"
-                                    "}"
-                                )
-                                FastMarkerCluster(data, callback=callback).add_to(m)
-
-                            # Add legend (bottom-left)
-
-                            legend_html = '''
-                                <div style="
-                                    position: fixed;
-                                    bottom: 35px;
-                                    left: 20px;
-                                    z-index: 9999;
-                                    background: rgba(0,0,0,0.75);
-                                    color: white;
-                                    padding: 10px 12px;
-                                    border-radius: 10px;
-                                    font-size: 14px;
-                                    box-shadow: 0 2px 10px rgba(0,0,0,0.35);
-                                ">
-                                  <div style="font-weight: 700; margin-bottom: 6px;">Soil Health (Sustainability)</div>
-                                  <div style="display:flex; align-items:center; gap:8px; margin:4px 0;">
-                                    <span style="display:inline-block; width:12px; height:12px; background:#2ecc71; border-radius:3px;"></span>
-                                    <span>High</span>
-                                  </div>
-                                  <div style="display:flex; align-items:center; gap:8px; margin:4px 0;">
-                                    <span style="display:inline-block; width:12px; height:12px; background:#f39c12; border-radius:3px;"></span>
-                                    <span>Moderate</span>
-                                  </div>
-                                  <div style="display:flex; align-items:center; gap:8px; margin:4px 0;">
-                                    <span style="display:inline-block; width:12px; height:12px; background:#e74c3c; border-radius:3px;"></span>
-                                    <span>Poor</span>
-                                  </div>
-                                </div>
-                            '''
-                            m.get_root().html.add_child(folium.Element(legend_html))
-
-                        folium.LayerControl().add_to(m)
                         st_folium(m, width=1024, height=520)
                     else:
-                        st.info("No valid Latitude/Longitude rows available to draw the map.")
+                        st.info("No valid Mindanao land points to display after filtering coordinates.")
                 except Exception as e:
                     st.warning(f"Unable to generate the Folium map from Random Forest predictions: {e}")
             else:
@@ -1352,6 +1216,7 @@ elif page == "📊 Visualization":
         else:
             st.info("Latitude and Longitude columns are required to generate the Folium map.")
         # ===== END NEW Folium hotspot section =====
+
 
         st.subheader("Parameter Overview (Levels & Distributions)")
         param_cols = [
