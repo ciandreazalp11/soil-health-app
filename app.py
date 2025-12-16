@@ -5,6 +5,7 @@ import plotly.express as px
 import folium
 from folium.plugins import HeatMap
 from streamlit_folium import st_folium
+from shapely.geometry import Point, Polygon
 from streamlit_option_menu import option_menu
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
@@ -1110,6 +1111,67 @@ elif page == "📊 Visualization":
 
                     # Prepare base map
                     df_geo = df_rf.dropna(subset=["Latitude", "Longitude"]).copy()
+                    # Optional: keep only points in Mindanao (reduces sea/out-of-area points)
+                    mindanao_only = st.checkbox(
+                        "Show Mindanao points only",
+                        value=True,
+                        help="Filters points using a rough Mindanao bounding box to avoid plotting points in the sea / outside Mindanao.",
+                        key="mindanao_only_map",
+                    )
+                    if mindanao_only:
+                        # Rough bounding box for Mindanao (incl. nearby islands). Adjust if needed.
+                        MIN_LAT, MAX_LAT = 4.0, 10.8
+                        MIN_LON, MAX_LON = 121.0, 127.9
+                        df_geo = df_geo[
+                            df_geo["Latitude"].between(MIN_LAT, MAX_LAT)
+                            & df_geo["Longitude"].between(MIN_LON, MAX_LON)
+                        ].copy()
+
+                        # Land-only mask (approximate Mindanao polygon) to avoid plotting points in the sea.
+                        # This removes offshore/coastal-water points that still fall inside the Mindanao bounding box.
+                        # For perfect accuracy, swap this polygon with an official Mindanao land GeoJSON boundary.
+                        try:
+                            mindanao_land_poly = Polygon([
+                                (121.9, 6.9),
+                                (122.0, 6.0),
+                                (122.2, 5.4),
+                                (122.6, 5.1),
+                                (123.2, 5.0),
+                                (123.8, 5.2),
+                                (124.6, 5.0),
+                                (125.3, 5.2),
+                                (126.0, 5.5),
+                                (126.6, 5.8),
+                                (127.2, 6.5),
+                                (127.4, 7.5),
+                                (127.2, 8.3),
+                                (126.9, 9.0),
+                                (126.4, 9.6),
+                                (126.0, 9.9),
+                                (125.3, 10.2),
+                                (124.6, 10.4),
+                                (123.8, 10.5),
+                                (123.2, 10.4),
+                                (122.6, 9.8),
+                                (122.2, 9.1),
+                                (121.8, 8.2),
+                                (121.7, 7.6),
+                                (121.9, 6.9)
+                            ])
+
+                            df_geo = df_geo[
+                                df_geo.apply(
+                                    lambda r: mindanao_land_poly.contains(
+                                        Point(float(r["Longitude"]), float(r["Latitude"]))
+                                    ),
+                                    axis=1,
+                                )
+                            ].copy()
+                        except Exception as e:
+                            st.warning(
+                                f"Land-only Mindanao filter could not be applied (showing bounding-box points): {e}"
+                            )
+
                     if not df_geo.empty:
                         center_lat = float(df_geo["Latitude"].mean())
                         center_lon = float(df_geo["Longitude"].mean())
@@ -1118,7 +1180,10 @@ elif page == "📊 Visualization":
                             location=[center_lat, center_lon],
                             zoom_start=6,
                             tiles="CartoDB dark_matter",
+                            max_bounds=True,
                         )
+                        if mindanao_only:
+                            m.fit_bounds([[MIN_LAT, MIN_LON], [MAX_LAT, MAX_LON]])
 
                         if task == "Classification":
                             # Map predicted classes to sustainability labels + colors
@@ -1189,78 +1254,78 @@ elif page == "📊 Visualization":
                             '''
                             m.get_root().html.add_child(folium.Element(legend_html))
 
-else:
-    # Regression mode: convert numeric predictions into sustainability classes
-    # (Poor / Moderate / High) using terciles, then plot dots (no heatmap).
-    p = pd.to_numeric(df_geo["RF_Prediction"], errors="coerce")
-    q1 = float(p.quantile(1/3))
-    q2 = float(p.quantile(2/3))
+                        else:
+                            # Regression mode: convert numeric predictions into sustainability classes
+                            # (Poor / Moderate / High) using terciles, then plot dots (no heatmap).
+                            p = pd.to_numeric(df_geo["RF_Prediction"], errors="coerce")
+                            q1 = float(p.quantile(1/3))
+                            q2 = float(p.quantile(2/3))
 
-    def _reg_to_class(v):
-        try:
-            v = float(v)
-        except Exception:
-            return "Poor"
-        if v >= q2:
-            return "High"
-        if v >= q1:
-            return "Moderate"
-        return "Poor"
+                            def _reg_to_class(v):
+                                try:
+                                    v = float(v)
+                                except Exception:
+                                    return "Poor"
+                                if v >= q2:
+                                    return "High"
+                                if v >= q1:
+                                    return "Moderate"
+                                return "Poor"
 
-    df_geo["Soil_Health_Class"] = df_geo["RF_Prediction"].apply(_reg_to_class)
+                            df_geo["Soil_Health_Class"] = df_geo["RF_Prediction"].apply(_reg_to_class)
 
-    color_map = {
-        "High": "#2ecc71",      # green
-        "Moderate": "#f39c12",  # orange
-        "Poor": "#e74c3c",      # red
-    }
+                            color_map = {
+                                "High": "#2ecc71",      # green
+                                "Moderate": "#f39c12",  # orange
+                                "Poor": "#e74c3c",      # red
+                            }
 
-    for _, row in df_geo.iterrows():
-        label = row["Soil_Health_Class"]
-        folium.CircleMarker(
-            location=[float(row["Latitude"]), float(row["Longitude"])],
-            radius=6,
-            color=color_map.get(label, "#e74c3c"),
-            fill=True,
-            fill_color=color_map.get(label, "#e74c3c"),
-            fill_opacity=0.9,
-            popup=folium.Popup(
-                f"<b>Soil Health:</b> {label}<br>"
-                f"<b>Prediction:</b> {row['RF_Prediction']}",
-                max_width=250,
-            ),
-        ).add_to(m)
+                            for _, row in df_geo.iterrows():
+                                label = row["Soil_Health_Class"]
+                                folium.CircleMarker(
+                                    location=[float(row["Latitude"]), float(row["Longitude"])],
+                                    radius=6,
+                                    color=color_map.get(label, "#e74c3c"),
+                                    fill=True,
+                                    fill_color=color_map.get(label, "#e74c3c"),
+                                    fill_opacity=0.9,
+                                    popup=folium.Popup(
+                                        f"<b>Soil Health:</b> {label}<br>"
+                                        f"<b>Prediction:</b> {row['RF_Prediction']}",
+                                        max_width=250,
+                                    ),
+                                ).add_to(m)
 
-    # Add legend (bottom-left)
-    legend_html = '''
-        <div style="
-            position: fixed;
-            bottom: 35px;
-            left: 20px;
-            z-index: 9999;
-            background: rgba(0,0,0,0.75);
-            color: white;
-            padding: 10px 12px;
-            border-radius: 10px;
-            font-size: 14px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.35);
-        ">
-          <div style="font-weight: 700; margin-bottom: 6px;">Soil Health (Sustainability)</div>
-          <div style="display:flex; align-items:center; gap:8px; margin:4px 0;">
-            <span style="display:inline-block; width:12px; height:12px; background:#2ecc71; border-radius:3px;"></span>
-            <span>High</span>
-          </div>
-          <div style="display:flex; align-items:center; gap:8px; margin:4px 0;">
-            <span style="display:inline-block; width:12px; height:12px; background:#f39c12; border-radius:3px;"></span>
-            <span>Moderate</span>
-          </div>
-          <div style="display:flex; align-items:center; gap:8px; margin:4px 0;">
-            <span style="display:inline-block; width:12px; height:12px; background:#e74c3c; border-radius:3px;"></span>
-            <span>Poor</span>
-          </div>
-        </div>
-    '''
-    m.get_root().html.add_child(folium.Element(legend_html))
+                            # Add legend (bottom-left)
+                            legend_html = '''
+                                <div style="
+                                    position: fixed;
+                                    bottom: 35px;
+                                    left: 20px;
+                                    z-index: 9999;
+                                    background: rgba(0,0,0,0.75);
+                                    color: white;
+                                    padding: 10px 12px;
+                                    border-radius: 10px;
+                                    font-size: 14px;
+                                    box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+                                ">
+                                  <div style="font-weight: 700; margin-bottom: 6px;">Soil Health (Sustainability)</div>
+                                  <div style="display:flex; align-items:center; gap:8px; margin:4px 0;">
+                                    <span style="display:inline-block; width:12px; height:12px; background:#2ecc71; border-radius:3px;"></span>
+                                    <span>High</span>
+                                  </div>
+                                  <div style="display:flex; align-items:center; gap:8px; margin:4px 0;">
+                                    <span style="display:inline-block; width:12px; height:12px; background:#f39c12; border-radius:3px;"></span>
+                                    <span>Moderate</span>
+                                  </div>
+                                  <div style="display:flex; align-items:center; gap:8px; margin:4px 0;">
+                                    <span style="display:inline-block; width:12px; height:12px; background:#e74c3c; border-radius:3px;"></span>
+                                    <span>Poor</span>
+                                  </div>
+                                </div>
+                            '''
+                            m.get_root().html.add_child(folium.Element(legend_html))
 
                         folium.LayerControl().add_to(m)
                         st_folium(m, width=1024, height=520)
