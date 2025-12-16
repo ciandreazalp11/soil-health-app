@@ -2,6 +2,9 @@ streamlit
 pandas
 numpy
 plotly
-scikit-learn
-openpyxl
 streamlit-option-menu
+scikit-learn
+joblib
+Pillow
+folium
+streamlit-folium
