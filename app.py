@@ -1076,11 +1076,10 @@ elif page == "📊 Visualization":
         if "Nitrogen" in df.columns and "Fertility_Level" not in df.columns:
             df["Fertility_Level"] = create_fertility_label(
                 df, col="Nitrogen", q=3
-            )
+            )        # ===== NEW: Folium classification hotspot map (RF) with legend (added feature; no other logic changed) =====
+        st.subheader("🗺️ Soil Health Classification Map (Random Forest)")
+        st.caption("Legend: 🟢 High • 🟠 Moderate • 🔴 Poor. Uses your trained Random Forest predictions.")
 
-
-        # ===== NEW: Folium hotspot map using Random Forest predictions (added feature; no other logic changed) =====
-        st.subheader("🔥 Soil Health Hotspot Map (Random Forest-based)")
         if "Latitude" in df.columns and "Longitude" in df.columns:
             model = st.session_state.get("model")
             scaler = st.session_state.get("scaler")
@@ -1094,10 +1093,12 @@ elif page == "📊 Visualization":
                 and all(f in df.columns for f in trained_features)
             ):
                 try:
+                    # Predict for all rows
                     X_all = df[trained_features]
                     X_scaled_all = scaler.transform(X_all)
                     preds = model.predict(X_scaled_all)
 
+                    # Determine task mode (classification vs regression)
                     task = None
                     if results and isinstance(results, dict) and "task" in results:
                         task = results["task"]
@@ -1107,51 +1108,114 @@ elif page == "📊 Visualization":
                     df_rf = df.copy()
                     df_rf["RF_Prediction"] = preds
 
-                    if task == "Classification":
-                        class_to_intensity = {"Low": 1.0, "Moderate": 2.0, "High": 3.0}
-                        df_rf["intensity"] = (
-                            df_rf["RF_Prediction"].astype(str).map(class_to_intensity).fillna(1.0)
-                        )
-                        legend_text = "Random Forest Predicted Fertility (Low / Moderate / High)"
-                    else:
-                        min_p = float(np.nanmin(df_rf["RF_Prediction"]))
-                        max_p = float(np.nanmax(df_rf["RF_Prediction"]))
-                        if max_p > min_p:
-                            df_rf["intensity"] = (df_rf["RF_Prediction"] - min_p) / (max_p - min_p)
-                        else:
-                            df_rf["intensity"] = 0.5
-                        legend_text = "Random Forest Predicted Nitrogen (relative intensity)"
-
-                    df_map = df_rf.dropna(subset=["Latitude", "Longitude", "intensity"]).copy()
-                    if not df_map.empty:
-                        center_lat = float(df_map["Latitude"].mean())
-                        center_lon = float(df_map["Longitude"].mean())
+                    # Prepare base map
+                    df_geo = df_rf.dropna(subset=["Latitude", "Longitude"]).copy()
+                    if not df_geo.empty:
+                        center_lat = float(df_geo["Latitude"].mean())
+                        center_lon = float(df_geo["Longitude"].mean())
 
                         m = folium.Map(
                             location=[center_lat, center_lon],
-                            zoom_start=7,
-                            tiles="CartoDB positron",
+                            zoom_start=6,
+                            tiles="CartoDB dark_matter",
                         )
 
-                        heat_data = df_map[["Latitude", "Longitude", "intensity"]].values.tolist()
-                        HeatMap(
-                            heat_data,
-                            radius=18,
-                            blur=15,
-                            max_zoom=12,
-                        ).add_to(m)
+                        if task == "Classification":
+                            # Map predicted classes to sustainability labels + colors
+                            # Accepts common variants (Low/Poor, Medium/Moderate, High)
+                            def _normalize_label(v):
+                                s = str(v).strip().lower()
+                                if s in ["high", "healthy", "good", "3", "2.0", "2", "excellent"]:
+                                    return "High"
+                                if s in ["moderate", "medium", "average", "2", "1.0", "1"]:
+                                    return "Moderate"
+                                if s in ["low", "poor", "bad", "0", "1", "depleted"]:
+                                    return "Poor"
+                                # fallback: keep original-ish, but treat unknown as Poor
+                                return "Poor"
+
+                            df_geo["Soil_Health_Class"] = df_geo["RF_Prediction"].apply(_normalize_label)
+
+                            color_map = {
+                                "High": "#2ecc71",      # green
+                                "Moderate": "#f39c12",  # orange
+                                "Poor": "#e74c3c",      # red
+                            }
+
+                            # Plot colored circle markers
+                            for _, row in df_geo.iterrows():
+                                label = row["Soil_Health_Class"]
+                                folium.CircleMarker(
+                                    location=[float(row["Latitude"]), float(row["Longitude"])],
+                                    radius=6,
+                                    color=color_map.get(label, "#e74c3c"),
+                                    fill=True,
+                                    fill_color=color_map.get(label, "#e74c3c"),
+                                    fill_opacity=0.9,
+                                    popup=folium.Popup(
+                                        f"<b>Soil Health:</b> {label}",
+                                        max_width=250,
+                                    ),
+                                ).add_to(m)
+
+                            # Add legend (bottom-left)
+                            legend_html = '''
+                                <div style="
+                                    position: fixed;
+                                    bottom: 35px;
+                                    left: 20px;
+                                    z-index: 9999;
+                                    background: rgba(0,0,0,0.75);
+                                    color: white;
+                                    padding: 10px 12px;
+                                    border-radius: 10px;
+                                    font-size: 14px;
+                                    box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+                                ">
+                                  <div style="font-weight: 700; margin-bottom: 6px;">Soil Health (Sustainability)</div>
+                                  <div style="display:flex; align-items:center; gap:8px; margin:4px 0;">
+                                    <span style="display:inline-block; width:12px; height:12px; background:#2ecc71; border-radius:3px;"></span>
+                                    <span>High</span>
+                                  </div>
+                                  <div style="display:flex; align-items:center; gap:8px; margin:4px 0;">
+                                    <span style="display:inline-block; width:12px; height:12px; background:#f39c12; border-radius:3px;"></span>
+                                    <span>Moderate</span>
+                                  </div>
+                                  <div style="display:flex; align-items:center; gap:8px; margin:4px 0;">
+                                    <span style="display:inline-block; width:12px; height:12px; background:#e74c3c; border-radius:3px;"></span>
+                                    <span>Poor</span>
+                                  </div>
+                                </div>
+                            '''
+                            m.get_root().html.add_child(folium.Element(legend_html))
+
+                        else:
+                            # Regression mode: render a true heatmap using normalized predictions (0–1)
+                            min_p = float(np.nanmin(df_geo["RF_Prediction"]))
+                            max_p = float(np.nanmax(df_geo["RF_Prediction"]))
+                            if max_p > min_p:
+                                df_geo["intensity"] = (df_geo["RF_Prediction"] - min_p) / (max_p - min_p)
+                            else:
+                                df_geo["intensity"] = 0.5
+
+                            heat_data = df_geo[["Latitude", "Longitude", "intensity"]].values.tolist()
+                            HeatMap(
+                                heat_data,
+                                radius=18,
+                                blur=15,
+                                max_zoom=12,
+                            ).add_to(m)
 
                         folium.LayerControl().add_to(m)
-                        st_folium(m, width=1024, height=500)
-                        st.caption(f"Hotspot intensity is derived from {legend_text}.")
+                        st_folium(m, width=1024, height=520)
                     else:
-                        st.info("No valid Latitude/Longitude rows available for the hotspot map.")
+                        st.info("No valid Latitude/Longitude rows available to draw the map.")
                 except Exception as e:
-                    st.warning(f"Unable to generate hotspot map from Random Forest: {e}")
+                    st.warning(f"Unable to generate the Folium map from Random Forest predictions: {e}")
             else:
-                st.info("To enable the Random Forest-based hotspot map, train a model first in the '🤖 Modeling' page.")
+                st.info("To enable this map, train a model first in the '🤖 Modeling' page.")
         else:
-            st.info("Latitude and Longitude columns are required to generate a Folium hotspot map.")
+            st.info("Latitude and Longitude columns are required to generate the Folium map.")
         # ===== END NEW Folium hotspot section =====
 
         st.subheader("Parameter Overview (Levels & Distributions)")
