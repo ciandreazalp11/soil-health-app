@@ -5,7 +5,8 @@ import plotly.express as px
 import folium
 from folium.plugins import HeatMap, FastMarkerCluster
 from streamlit_folium import st_folium
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Point, Polygon, box
+import geopandas as gpd
 from streamlit_option_menu import option_menu
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
@@ -1119,47 +1120,37 @@ elif page == "📊 Visualization":
                         & df_geo["Longitude"].between(MIN_LON, MAX_LON)
                     ].copy()
 
-                    try:
-                            mindanao_land_poly = Polygon([
-                                (121.9, 6.9),
-                                (122.0, 6.0),
-                                (122.2, 5.4),
-                                (122.6, 5.1),
-                                (123.2, 5.0),
-                                (123.8, 5.2),
-                                (124.6, 5.0),
-                                (125.3, 5.2),
-                                (126.0, 5.5),
-                                (126.6, 5.8),
-                                (127.2, 6.5),
-                                (127.4, 7.5),
-                                (127.2, 8.3),
-                                (126.9, 9.0),
-                                (126.4, 9.6),
-                                (126.0, 9.9),
-                                (125.3, 10.2),
-                                (124.6, 10.4),
-                                (123.8, 10.5),
-                                (123.2, 10.4),
-                                (122.6, 9.8),
-                                (122.2, 9.1),
-                                (121.8, 8.2),
-                                (121.7, 7.6),
-                                (121.9, 6.9)
-                            ])
+                    # Default map bounds (Mindanao region)
+                    MIN_LAT_LAND, MAX_LAT_LAND = MIN_LAT, MAX_LAT
+                    MIN_LON_LAND, MAX_LON_LAND = MIN_LON, MAX_LON
 
-                            df_geo = df_geo[
-                                df_geo.apply(
-                                    lambda r: mindanao_land_poly.contains(
-                                        Point(float(r["Longitude"]), float(r["Latitude"]))
-                                    ),
-                                    axis=1,
-                                )
-                            ].copy()
-                    except Exception as e:
-                        st.warning(
-                            f"Land-only Mindanao filter could not be applied (showing bounding-box points): {e}"
-                        )
+                                        try:
+                                            @st.cache_resource
+                                            def _mindanao_land_polygon_ne():
+                                                # Natural Earth low-res land polygons (bundled with geopandas)
+                                                world = gpd.read_file(gpd.datasets.get_path("naturalearth_lowres"))
+                                                ph = world[world["name"] == "Philippines"].geometry.iloc[0]  # MultiPolygon
+                                                mindanao_bbox = box(MIN_LON, MIN_LAT, MAX_LON, MAX_LAT)
+                                                land = ph.intersection(mindanao_bbox)
+                                                if land.is_empty:
+                                                    return None
+                                                if land.geom_type == "MultiPolygon":
+                                                    land = max(land.geoms, key=lambda g: g.area)
+                                                return land
+
+                                            land_poly = _mindanao_land_polygon_ne()
+                                            if land_poly is not None:
+                                                # Strict land-only filter
+                                                pts = [Point(float(lon), float(lat)) for lat, lon in zip(df_geo["Latitude"], df_geo["Longitude"])]
+                                                mask = [land_poly.contains(p) for p in pts]
+                                                df_geo = df_geo.loc[mask].copy()
+
+                                                # Tighten bounds to land polygon bounds
+                                                minx, miny, maxx, maxy = land_poly.bounds
+                                                MIN_LON_LAND, MIN_LAT_LAND = float(minx), float(miny)
+                                                MAX_LON_LAND, MAX_LAT_LAND = float(maxx), float(maxy)
+                                        except Exception as e:
+                                            st.warning(f"Land-only Mindanao filter failed (showing bounding-box points): {e}"))
 
                     if not df_geo.empty:
                         center_lat = float(df_geo["Latitude"].mean())
@@ -1172,7 +1163,7 @@ elif page == "📊 Visualization":
                             max_bounds=True,
                         )
                         # Lock map view to Mindanao bounds (prevents panning outside)
-                        bounds = [[MIN_LAT, MIN_LON], [MAX_LAT, MAX_LON]]
+                        bounds = [[MIN_LAT_LAND, MIN_LON_LAND], [MAX_LAT_LAND, MAX_LON_LAND]]
                         try:
                             m.fit_bounds(bounds)
                             m.options["maxBounds"] = bounds
