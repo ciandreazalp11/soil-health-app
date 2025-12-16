@@ -1480,6 +1480,31 @@ elif page == "📈 Results":
                         [c for c in cols_order if c in rep_df.columns]
                     ]
                     st.dataframe(rep_df[cols_order], use_container_width=True)
+                    # --- NEW: Classification metrics chart (per-class) ---
+                    try:
+                        plot_df = rep_df.copy()
+                        plot_df["Class"] = plot_df["Class"].astype(str)
+                        plot_df = plot_df[~plot_df["Class"].isin(["accuracy", "macro avg", "weighted avg"])]
+                        metric_cols = [c for c in ["precision", "recall", "f1-score"] if c in plot_df.columns]
+                        if len(plot_df) > 0 and len(metric_cols) > 0:
+                            long_df = plot_df[["Class"] + metric_cols].melt(
+                                id_vars="Class", var_name="Metric", value_name="Score"
+                            )
+                            fig_rep = px.bar(
+                                long_df,
+                                x="Class",
+                                y="Score",
+                                color="Metric",
+                                barmode="group",
+                                title="Classification Metrics by Class",
+                            )
+                            fig_rep.update_yaxes(range=[0, 1])
+                            fig_rep.update_layout(xaxis_title="", yaxis_title="Score (0–1)")
+                            st.plotly_chart(fig_rep, use_container_width=True)
+                    except Exception:
+                        pass
+                    # --- END NEW ---
+
                 except Exception:
                     st.text(classification_report(y_test, y_pred))
             else:
