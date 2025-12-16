@@ -1255,20 +1255,56 @@ elif page == "📊 Visualization":
         st.subheader("Correlation Matrix")
         numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
         if numeric_cols:
-            corr = df[numeric_cols].corr()
-            corr = corr.replace([np.inf, -np.inf], np.nan).fillna(0.0)
-            fig_corr = px.imshow(
-                corr,
-                text_auto=".2f",
-                color_continuous_scale=px.colors.sequential.Viridis,
-                title="Correlation Heatmap",
+            # Pick a reasonable default subset so the heatmap stays readable
+            exclude_like = {"latitude", "lat", "longitude", "lon", "lng", "long", "longitude_2"}
+            default_cols = [c for c in numeric_cols if c.strip().lower() not in exclude_like][:12]
+            selected_cols = st.multiselect(
+                "Select numeric columns to include (fewer columns = clearer heatmap)",
+                options=numeric_cols,
+                default=default_cols if len(default_cols) >= 2 else numeric_cols[: min(12, len(numeric_cols))],
             )
-            fig_corr.update_traces(
-                texttemplate="%{z:.2f}",
-                textfont=dict(color="white", size=10),
-            )
-            fig_corr.update_layout(template="plotly_dark")
-            st.plotly_chart(fig_corr, use_container_width=True)
+
+            if selected_cols is None or len(selected_cols) < 2:
+                st.info("Select at least 2 numeric columns to view the correlation matrix.")
+            else:
+                show_values = st.checkbox(
+                    "Show correlation values on cells (can get cluttered with many columns)",
+                    value=False,
+                )
+
+                corr = df[selected_cols].corr()
+                corr = corr.replace([np.inf, -np.inf], np.nan).fillna(0.0)
+
+                fig_corr = px.imshow(
+                    corr,
+                    color_continuous_scale=px.colors.sequential.Viridis,
+                    zmin=-1,
+                    zmax=1,
+                    aspect="auto",
+                    title="Correlation Heatmap",
+                )
+
+                # Improve readability
+                fig_corr.update_layout(
+                    template="plotly_dark",
+                    height=650,
+                    margin=dict(l=40, r=40, t=70, b=40),
+                )
+                fig_corr.update_xaxes(tickangle=45, tickfont=dict(size=12))
+                fig_corr.update_yaxes(tickfont=dict(size=12))
+
+                # Only overlay numbers when requested AND not too many columns
+                if show_values and len(selected_cols) <= 15:
+                    txt = corr.round(2).astype(str).values
+                    fig_corr.update_traces(
+                        text=txt,
+                        texttemplate="%{text}",
+                        textfont=dict(color="white", size=10),
+                    )
+                else:
+                    fig_corr.update_traces(text=None)
+
+                st.plotly_chart(fig_corr, use_container_width=True)
         else:
             st.info("No numeric columns available for correlation matrix.")
         st.markdown("---")
