@@ -1,13 +1,12 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import geopandas as gpd
-from shapely.geometry import Point, box
 import plotly.express as px
 import folium
 from folium.plugins import HeatMap, FastMarkerCluster
 from streamlit_folium import st_folium
-from shapely.geometry import Point, Polygon
+import geopandas as gpd
+from shapely.geometry import Point, Polygon, box
 from streamlit_option_menu import option_menu
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
@@ -31,6 +30,31 @@ import warnings
 import re
 
 warnings.filterwarnings("ignore", category=UserWarning)
+
+
+@st.cache_resource
+def _get_mindanao_land_poly(min_lon: float, min_lat: float, max_lon: float, max_lat: float):
+    """Return a *land-only* polygon for Mindanao by intersecting PH land geometry with a Mindanao bbox.
+    Uses Natural Earth (bundled with GeoPandas). Cached for performance.
+    """
+    world = gpd.read_file(gpd.datasets.get_path("naturalearth_lowres"))
+    ph = world[world["name"] == "Philippines"].geometry.iloc[0]  # MultiPolygon
+    mind_bbox = box(min_lon, min_lat, max_lon, max_lat)
+    land = ph.intersection(mind_bbox)
+
+    # Keep the largest piece (Mindanao main landmass)
+    if land.geom_type == "MultiPolygon":
+        land = max(land.geoms, key=lambda g: g.area)
+
+    # Slightly shrink to avoid coastal water getting included due to low-res geometry
+    try:
+        land_shrunk = land.buffer(-0.02)
+        if land_shrunk is not None and (not land_shrunk.is_empty):
+            land = land_shrunk
+    except Exception:
+        pass
+
+    return land
 
 st.set_page_config(
     page_title="Machine Learning-Driven Soil Analysis for Sustainable Agriculture System",
@@ -1121,34 +1145,24 @@ elif page == "📊 Visualization":
                         & df_geo["Longitude"].between(MIN_LON, MAX_LON)
                     ].copy()
 
-                                        # Strict land-only Mindanao filter using Natural Earth Philippines land geometry
-                    @st.cache_resource
-                    def _mindanao_land_polygon():
-                        world = gpd.read_file(gpd.datasets.get_path("naturalearth_lowres"))
-                        ph = world[world["name"] == "Philippines"].geometry.iloc[0]
-                        mindanao_bbox = box(MIN_LON, MIN_LAT, MAX_LON, MAX_LAT)
-                        mindanao_land = ph.intersection(mindanao_bbox)
-                        # Keep the largest piece (main Mindanao landmass) if multiple geometries remain
-                        try:
-                            if getattr(mindanao_land, "geom_type", "") == "MultiPolygon":
-                                mindanao_land = max(mindanao_land.geoms, key=lambda g: g.area)
-                        except Exception:
-                            pass
-                        return mindanao_land
-                    
+                    # Strict land-only filter (Mindanao) using PH land geometry
                     try:
-                        land_poly = _mindanao_land_polygon()
-                        # Strict point-in-polygon (land only)
-                        pts = [Point(float(lon), float(lat)) for lat, lon in zip(df_geo["Latitude"], df_geo["Longitude"])]
-                        mask = [land_poly.contains(p) for p in pts]
-                        df_geo = df_geo.loc[mask].copy()
+                        mindanao_land_poly = _get_mindanao_land_poly(MIN_LON, MIN_LAT, MAX_LON, MAX_LAT)
+                        df_geo = df_geo[
+                            df_geo.apply(
+                                lambda r: mindanao_land_poly.contains(
+                                    Point(float(r["Longitude"]), float(r["Latitude"]))
+                                ),
+                                axis=1,
+                            )
+                        ].copy()
                     except Exception as e:
-                        st.warning(f"Land-only Mindanao filter failed (showing bbox points): {e}")
+                        st.warning(f"Mindanao land filtering failed; showing bbox-filtered points only: {e}")
+                        st.warning(
+                            f"Land-only Mindanao filter could not be applied (showing bounding-box points): {e}"
+                        )
 
                     if not df_geo.empty:
-                        # If there are many points, sample to keep the map responsive
-                        if len(df_geo) > 6000:
-                            df_geo = df_geo.sample(6000, random_state=42)
                         center_lat = float(df_geo["Latitude"].mean())
                         center_lon = float(df_geo["Longitude"].mean())
 
@@ -1188,33 +1202,30 @@ elif page == "📊 Visualization":
                                 "Moderate": "#f39c12",  # orange
                                 "Poor": "#e74c3c",      # red
                             }
-                            # Plot dots (fast) using FastMarkerCluster by class color
-                            def _to_latlon_list(d):
-                                return d[["Latitude", "Longitude"]].astype(float).values.tolist()
-
+                            # Plot dots (no clustering) as circle markers colored by class
                             groups = [
                                 ("High", "#2ecc71"),
                                 ("Moderate", "#f39c12"),
                                 ("Poor", "#e74c3c"),
                             ]
+
                             for label, color in groups:
                                 sub = df_geo[df_geo["Soil_Health_Class"] == label]
                                 if sub.empty:
                                     continue
-                                # Draw individual dots (no clustering) so markers never appear offshore due to cluster centroids
+
                                 for _, r in sub.iterrows():
                                     folium.CircleMarker(
-                                        location=[float(r['Latitude']), float(r['Longitude'])],
+                                        location=[float(r["Latitude"]), float(r["Longitude"])],
                                         radius=5,
                                         color=color,
                                         weight=1,
                                         fill=True,
                                         fill_color=color,
                                         fill_opacity=0.85,
-                                        popup=f"{label}",
                                     ).add_to(m)
 
-                            # Add legend (bottom-left)
+# Add legend (bottom-left)
 
 
                             legend_html = '''
@@ -1281,22 +1292,22 @@ elif page == "📊 Visualization":
                                 ("Moderate", "#f39c12"),
                                 ("Poor", "#e74c3c"),
                             ]
+
                             for label, color in groups:
                                 sub = df_geo[df_geo["Soil_Health_Class"] == label]
                                 if sub.empty:
                                     continue
-                                # Draw individual dots (no clustering) so markers never appear offshore due to cluster centroids
-                                for _, r in sub.iterrows():
-                                    folium.CircleMarker(
-                                        location=[float(r['Latitude']), float(r['Longitude'])],
-                                        radius=5,
-                                        color=color,
-                                        weight=1,
-                                        fill=True,
-                                        fill_color=color,
-                                        fill_opacity=0.85,
-                                        popup=f"{label}",
-                                    ).add_to(m)
+                                data = _to_latlon_list(sub)
+
+                                callback = (
+                                    "function (row) {"
+                                    "return L.circleMarker(new L.LatLng(row[0], row[1]), {"
+                                    f"'radius': 6, 'color': '{color}', 'weight': 1, "
+                                    f"'fillColor': '{color}', 'fillOpacity': 0.85"
+                                    "});"
+                                    "}"
+                                )
+                                FastMarkerCluster(data, callback=callback).add_to(m)
 
                             # Add legend (bottom-left)
 
