@@ -8,3 +8,4 @@ joblib
 Pillow
 folium
 streamlit-folium
+shapely
