@@ -2,10 +2,11 @@ streamlit
 pandas
 numpy
 plotly
+folium
+streamlit-folium
+shapely
+geopandas
 streamlit-option-menu
 scikit-learn
 joblib
 Pillow
-folium
-streamlit-folium
-shapely
