@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import folium
-from folium.plugins import HeatMap
+from folium.plugins import HeatMap, FastMarkerCluster
 from streamlit_folium import st_folium
 from shapely.geometry import Point, Polygon
 from streamlit_option_menu import option_menu
@@ -1111,26 +1111,15 @@ elif page == "📊 Visualization":
 
                     # Prepare base map
                     df_geo = df_rf.dropna(subset=["Latitude", "Longitude"]).copy()
-                    # Optional: keep only points in Mindanao (reduces sea/out-of-area points)
-                    mindanao_only = st.checkbox(
-                        "Show Mindanao points only",
-                        value=True,
-                        help="Filters points using a rough Mindanao bounding box to avoid plotting points in the sea / outside Mindanao.",
-                        key="mindanao_only_map",
-                    )
-                    if mindanao_only:
-                        # Rough bounding box for Mindanao (incl. nearby islands). Adjust if needed.
-                        MIN_LAT, MAX_LAT = 4.0, 10.8
-                        MIN_LON, MAX_LON = 121.0, 127.9
-                        df_geo = df_geo[
-                            df_geo["Latitude"].between(MIN_LAT, MAX_LAT)
-                            & df_geo["Longitude"].between(MIN_LON, MAX_LON)
-                        ].copy()
+                    # Mindanao-only filter (always on): bounding box first (fast), then land-only polygon (best-effort)
+                    MIN_LAT, MAX_LAT = 4.0, 10.8
+                    MIN_LON, MAX_LON = 121.0, 127.9
+                    df_geo = df_geo[
+                        df_geo["Latitude"].between(MIN_LAT, MAX_LAT)
+                        & df_geo["Longitude"].between(MIN_LON, MAX_LON)
+                    ].copy()
 
-                        # Land-only mask (approximate Mindanao polygon) to avoid plotting points in the sea.
-                        # This removes offshore/coastal-water points that still fall inside the Mindanao bounding box.
-                        # For perfect accuracy, swap this polygon with an official Mindanao land GeoJSON boundary.
-                        try:
+                    try:
                             mindanao_land_poly = Polygon([
                                 (121.9, 6.9),
                                 (122.0, 6.0),
@@ -1167,10 +1156,10 @@ elif page == "📊 Visualization":
                                     axis=1,
                                 )
                             ].copy()
-                        except Exception as e:
-                            st.warning(
-                                f"Land-only Mindanao filter could not be applied (showing bounding-box points): {e}"
-                            )
+                    except Exception as e:
+                        st.warning(
+                            f"Land-only Mindanao filter could not be applied (showing bounding-box points): {e}"
+                        )
 
                     if not df_geo.empty:
                         center_lat = float(df_geo["Latitude"].mean())
@@ -1182,8 +1171,14 @@ elif page == "📊 Visualization":
                             tiles="CartoDB dark_matter",
                             max_bounds=True,
                         )
-                        if mindanao_only:
-                            m.fit_bounds([[MIN_LAT, MIN_LON], [MAX_LAT, MAX_LON]])
+                        # Lock map view to Mindanao bounds (prevents panning outside)
+                        bounds = [[MIN_LAT, MIN_LON], [MAX_LAT, MAX_LON]]
+                        try:
+                            m.fit_bounds(bounds)
+                            m.options["maxBounds"] = bounds
+                            m.options["maxBoundsViscosity"] = 1.0
+                        except Exception:
+                            pass
 
                         if task == "Classification":
                             # Map predicted classes to sustainability labels + colors
@@ -1206,24 +1201,35 @@ elif page == "📊 Visualization":
                                 "Moderate": "#f39c12",  # orange
                                 "Poor": "#e74c3c",      # red
                             }
+                            # Plot dots (fast) using FastMarkerCluster by class color
+                            def _to_latlon_list(d):
+                                return d[["Latitude", "Longitude"]].astype(float).values.tolist()
 
-                            # Plot colored circle markers
-                            for _, row in df_geo.iterrows():
-                                label = row["Soil_Health_Class"]
-                                folium.CircleMarker(
-                                    location=[float(row["Latitude"]), float(row["Longitude"])],
-                                    radius=6,
-                                    color=color_map.get(label, "#e74c3c"),
-                                    fill=True,
-                                    fill_color=color_map.get(label, "#e74c3c"),
-                                    fill_opacity=0.9,
-                                    popup=folium.Popup(
-                                        f"<b>Soil Health:</b> {label}",
-                                        max_width=250,
-                                    ),
-                                ).add_to(m)
+                            groups = [
+                                ("High", "#2ecc71"),
+                                ("Moderate", "#f39c12"),
+                                ("Poor", "#e74c3c"),
+                            ]
+
+                            for label, color in groups:
+                                sub = df_geo[df_geo["Soil_Health_Class"] == label]
+                                if sub.empty:
+                                    continue
+                                data = _to_latlon_list(sub)
+
+                                callback = (
+                                    "function (row) {"
+                                    "return L.circleMarker(new L.LatLng(row[0], row[1]), {"
+                                    f"'radius': 6, 'color': '{color}', 'weight': 1, "
+                                    f"'fillColor': '{color}', 'fillOpacity': 0.85"
+                                    "});"
+                                    "}"
+                                )
+                                FastMarkerCluster(data, callback=callback).add_to(m)
 
                             # Add legend (bottom-left)
+
+
                             legend_html = '''
                                 <div style="
                                     position: fixed;
@@ -1279,24 +1285,34 @@ elif page == "📊 Visualization":
                                 "Moderate": "#f39c12",  # orange
                                 "Poor": "#e74c3c",      # red
                             }
+                            # Plot dots (fast) using FastMarkerCluster by class color
+                            def _to_latlon_list(d):
+                                return d[["Latitude", "Longitude"]].astype(float).values.tolist()
 
-                            for _, row in df_geo.iterrows():
-                                label = row["Soil_Health_Class"]
-                                folium.CircleMarker(
-                                    location=[float(row["Latitude"]), float(row["Longitude"])],
-                                    radius=6,
-                                    color=color_map.get(label, "#e74c3c"),
-                                    fill=True,
-                                    fill_color=color_map.get(label, "#e74c3c"),
-                                    fill_opacity=0.9,
-                                    popup=folium.Popup(
-                                        f"<b>Soil Health:</b> {label}<br>"
-                                        f"<b>Prediction:</b> {row['RF_Prediction']}",
-                                        max_width=250,
-                                    ),
-                                ).add_to(m)
+                            groups = [
+                                ("High", "#2ecc71"),
+                                ("Moderate", "#f39c12"),
+                                ("Poor", "#e74c3c"),
+                            ]
+
+                            for label, color in groups:
+                                sub = df_geo[df_geo["Soil_Health_Class"] == label]
+                                if sub.empty:
+                                    continue
+                                data = _to_latlon_list(sub)
+
+                                callback = (
+                                    "function (row) {"
+                                    "return L.circleMarker(new L.LatLng(row[0], row[1]), {"
+                                    f"'radius': 6, 'color': '{color}', 'weight': 1, "
+                                    f"'fillColor': '{color}', 'fillOpacity': 0.85"
+                                    "});"
+                                    "}"
+                                )
+                                FastMarkerCluster(data, callback=callback).add_to(m)
 
                             # Add legend (bottom-left)
+
                             legend_html = '''
                                 <div style="
                                     position: fixed;
