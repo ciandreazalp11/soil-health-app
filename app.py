@@ -56,12 +56,29 @@ MINDANAO_POLYGON = [
     (8.6, 123.3), (9.2, 123.4)
 ]
 
+
+# Areas to EXCLUDE (approx.) to remove offshore clusters that still fall inside the coarse boundary.
+# Each polygon is a list of (lat, lon) tuples. Tweak coordinates if needed.
+EXCLUDE_POLYGONS = [
+    # Bohol Sea pocket (north-central)
+    [(10.6, 124.2), (10.6, 125.0), (9.8, 125.0), (9.8, 124.2)],
+    # Surigao Sea pocket (north-east, off Surigao City)
+    [(10.6, 125.2), (10.6, 126.0), (9.9, 126.0), (9.9, 125.2)],
+    # Far north-east offshore pocket
+    [(10.8, 126.5), (10.8, 127.4), (10.0, 127.4), (10.0, 126.5)],
+    # Davao Gulf / south-east offshore pocket
+    [(7.2, 125.8), (7.2, 126.9), (6.1, 126.9), (6.1, 125.8)],
+    # South-west offshore pocket (Sulu Sea side)
+    [(6.8, 121.2), (6.8, 122.0), (5.7, 122.0), (5.7, 121.2)],
+]
+
+
 def _filter_to_mindanao_boundary(df_in: pd.DataFrame) -> pd.DataFrame:
     """Return only rows whose (Latitude, Longitude) fall inside MINDANAO_POLYGON."""
     df0 = df_in.dropna(subset=["Latitude", "Longitude"]).copy()
     lats = df0["Latitude"].astype(float).to_numpy()
     lons = df0["Longitude"].astype(float).to_numpy()
-    keep = [_point_in_poly(lat, lon, MINDANAO_POLYGON) for lat, lon in zip(lats, lons)]
+    keep = [(_point_in_poly(lat, lon, MINDANAO_POLYGON) and not any(_point_in_poly(lat, lon, poly) for poly in EXCLUDE_POLYGONS)) for lat, lon in zip(lats, lons)]
     return df0.loc[keep]
 
 warnings.filterwarnings("ignore", category=UserWarning)
