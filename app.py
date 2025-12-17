@@ -1397,6 +1397,107 @@ elif page == "📊 Visualization":
             st.info("No numeric columns available for correlation matrix.")
         st.markdown("---")
 
+        # === Location map using Latitude/Longitude/Province, auto-focused on data in PH ===
+        if "Latitude" in df.columns and "Longitude" in df.columns:
+            st.subheader("🗺️ Location map of soil samples (auto-zoom on PH data)")
+            loc_df = df.dropna(subset=["Latitude", "Longitude"]).copy()
+            if not loc_df.empty:
+                # Basic sanity filter: keep only plausible PH lat/lon
+                loc_df = loc_df[
+                    (loc_df["Latitude"].between(4, 22))
+                    & (loc_df["Longitude"].between(116, 127))
+                ]
+
+                if loc_df.empty:
+                    st.info(
+                        "No latitude/longitude values fall inside Philippines bounds (4–22 N, 116–127 E)."
+                    )
+                else:
+                    prov_col = (
+                        "Province"
+                        if "Province" in loc_df.columns
+                        else ("province" if "province" in loc_df.columns else None)
+                    )
+
+                    color_col = None
+                    if "Fertility_Level" in loc_df.columns:
+                        color_col = "Fertility_Level"
+                    elif prov_col is not None:
+                        color_col = prov_col
+
+                    hover_cols = []
+                    if prov_col and prov_col in loc_df.columns:
+                        hover_cols.append(prov_col)
+                    for col in ["soil_type"]:
+                        if col in loc_df.columns and col not in hover_cols:
+                            hover_cols.append(col)
+                    for col in [
+                        "pH",
+                        "Nitrogen",
+                        "Phosphorus",
+                        "Potassium",
+                        "Moisture",
+                        "Organic Matter",
+                    ]:
+                        if col in loc_df.columns and col not in hover_cols:
+                            hover_cols.append(col)
+
+                    lat_min = float(loc_df["Latitude"].min())
+                    lat_max = float(loc_df["Latitude"].max())
+                    lon_min = float(loc_df["Longitude"].min())
+                    lon_max = float(loc_df["Longitude"].max())
+                    lat_center = (lat_min + lat_max) / 2.0
+                    lon_center = (lon_min + lon_max) / 2.0
+
+                    if color_col:
+                        fig_geo = px.scatter_geo(
+                            loc_df,
+                            lat="Latitude",
+                            lon="Longitude",
+                            color=color_col,
+                            hover_name=prov_col if prov_col else None,
+                            hover_data=hover_cols,
+                            title="Soil sample locations by fertility/province (Philippines)",
+                        )
+                    else:
+                        fig_geo = px.scatter_geo(
+                            loc_df,
+                            lat="Latitude",
+                            lon="Longitude",
+                            hover_data=hover_cols,
+                            title="Soil sample locations (Philippines)",
+                        )
+
+                    fig_geo.update_geos(
+                        scope="asia",
+                        center=dict(lat=lat_center, lon=lon_center),
+                        lataxis_range=[lat_min - 0.5, lat_max + 0.5],
+                        lonaxis_range=[lon_min - 0.5, lon_max + 0.5],
+                        showcoastlines=True,
+                        showcountries=True,
+                        countrycolor="white",
+                        coastlinecolor="white",
+                        projection_type="mercator",
+                    )
+                    fig_geo.update_layout(template="plotly_dark", height=500)
+                    st.plotly_chart(fig_geo, use_container_width=True)
+            else:
+                st.info(
+                    "Latitude/Longitude present but all rows are NaN; map cannot be drawn."
+                )
+
+elif page == "📈 Results":
+    st.title("📈 Model Results & Interpretation")
+    if not st.session_state.get("results"):
+        st.info(
+            "No trained model in session. Train a model first (Modeling or Quick Model)."
+        )
+    else:
+        results = st.session_state["results"]
+        task = results["task"]
+        y_test = np.array(results["y_test"])
+        y_pred = np.array(results["y_pred"])
+
         st.subheader("Model Summary")
         colA, colB = st.columns([3, 2])
         with colA:
