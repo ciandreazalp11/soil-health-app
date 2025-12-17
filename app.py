@@ -1081,15 +1081,63 @@ elif page == "📊 Visualization":
         st.subheader("🗺️ Soil Health Classification Map (Random Forest)")
         st.caption("Legend: 🟢 High • 🟠 Moderate • 🔴 Poor. Uses your trained Random Forest predictions.")
 
+                def _point_in_poly(lat: float, lon: float, poly) -> bool:
+            """Ray-casting point-in-polygon test (no extra deps)."""
+            x, y = float(lon), float(lat)
+            inside = False
+            n = len(poly)
+            for i in range(n):
+                x1, y1 = poly[i]
+                x2, y2 = poly[(i + 1) % n]
+                # Check edge intersects ray to the right of point
+                if ((y1 > y) != (y2 > y)):
+                    xinters = (x2 - x1) * (y - y1) / (y2 - y1 + 1e-12) + x1
+                    if x < xinters:
+                        inside = not inside
+            return inside
+
+        # Approximate Mindanao boundary (lon, lat). Conservative to avoid offshore dots.
+        MINDANAO_POLY = [
+            (121.05, 6.00),
+            (121.00, 7.10),
+            (121.35, 8.25),
+            (122.10, 8.95),
+            (123.05, 9.55),
+            (124.10, 10.10),
+            (125.25, 10.65),
+            (126.20, 10.40),
+            (126.95, 9.85),
+            (127.35, 8.90),
+            (127.45, 8.00),
+            (126.95, 7.20),
+            (126.55, 6.60),
+            (126.65, 6.05),
+            (126.10, 5.55),
+            (125.30, 5.20),
+            (124.55, 5.45),
+            (123.85, 5.60),
+            (123.20, 5.55),
+            (122.55, 5.90),
+            (122.00, 6.30),
+            (121.50, 6.15),
+            (121.05, 6.00),
+        ]
+
         def _filter_mindanao_land_only(df_in: pd.DataFrame) -> pd.DataFrame:
-            """Hard filter to hide points outside Mindanao land-safe area (removes offshore/out-of-region coords)."""
+            """Hide points outside the blue Mindanao boundary (no plotting outside)."""
             df0 = df_in.dropna(subset=["Latitude", "Longitude"]).copy()
-            # Tight Mindanao bounds (intentionally conservative to avoid sea points)
+
+            # Fast prefilter (keeps app responsive)
             df0 = df0[
-                (df0["Latitude"] >= 5.0) & (df0["Latitude"] <= 10.5) &
-                (df0["Longitude"] >= 121.5) & (df0["Longitude"] <= 127.3)
+                (df0["Latitude"] >= 5.0) & (df0["Latitude"] <= 10.8) &
+                (df0["Longitude"] >= 121.0) & (df0["Longitude"] <= 127.8)
             ]
-            return df0
+            if df0.empty:
+                return df0
+
+            mask = df0.apply(lambda r: _point_in_poly(r["Latitude"], r["Longitude"], MINDANAO_POLY), axis=1)
+            return df0.loc[mask]
+
 
         if "Latitude" in df.columns and "Longitude" in df.columns:
             model = st.session_state.get("model")
