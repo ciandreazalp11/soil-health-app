@@ -27,6 +27,43 @@ from PIL import Image
 import warnings
 import re
 
+
+# =========================
+# Mindanao boundary filter (blue outline)
+# =========================
+def _point_in_poly(lat: float, lon: float, poly) -> bool:
+    """Ray casting point-in-polygon. poly is a list of (lat, lon)."""
+    inside = False
+    n = len(poly)
+    j = n - 1
+    for i in range(n):
+        lat_i, lon_i = poly[i]
+        lat_j, lon_j = poly[j]
+        if ( (lon_i > lon) != (lon_j > lon) ):
+            x = (lat_j - lat_i) * (lon - lon_i) / (lon_j - lon_i + 1e-12) + lat_i
+            if lat < x:
+                inside = not inside
+        j = i
+    return inside
+
+# Approximate Mindanao land boundary matching the blue outline (lat, lon)
+MINDANAO_POLYGON = [
+    (9.8, 123.7), (10.2, 124.5), (10.5, 125.5), (10.3, 126.6),
+    (9.7, 127.3), (8.8, 126.9), (8.1, 126.5), (7.3, 126.2),
+    (6.6, 125.7), (6.1, 125.1), (5.7, 124.6), (5.4, 123.9),
+    (5.2, 123.2), (5.1, 122.4), (5.3, 121.8), (5.8, 121.6),
+    (6.4, 121.8), (6.9, 122.3), (7.4, 122.7), (8.0, 123.1),
+    (8.6, 123.3), (9.2, 123.4)
+]
+
+def _filter_to_mindanao_boundary(df_in: pd.DataFrame) -> pd.DataFrame:
+    """Return only rows whose (Latitude, Longitude) fall inside MINDANAO_POLYGON."""
+    df0 = df_in.dropna(subset=["Latitude", "Longitude"]).copy()
+    lats = df0["Latitude"].astype(float).to_numpy()
+    lons = df0["Longitude"].astype(float).to_numpy()
+    keep = [_point_in_poly(lat, lon, MINDANAO_POLYGON) for lat, lon in zip(lats, lons)]
+    return df0.loc[keep]
+
 warnings.filterwarnings("ignore", category=UserWarning)
 
 st.set_page_config(
@@ -1080,65 +1117,6 @@ elif page == "📊 Visualization":
         # ===== NEW: Folium classification map (RF) — dots only, strict Mindanao land-safe bounds, with legend =====
         st.subheader("🗺️ Soil Health Classification Map (Random Forest)")
         st.caption("Legend: 🟢 High • 🟠 Moderate • 🔴 Poor. Uses your trained Random Forest predictions.")
-
-                def _point_in_poly(lat: float, lon: float, poly) -> bool:
-            """Ray-casting point-in-polygon test (no extra deps)."""
-            x, y = float(lon), float(lat)
-            inside = False
-            n = len(poly)
-            for i in range(n):
-                x1, y1 = poly[i]
-                x2, y2 = poly[(i + 1) % n]
-                # Check edge intersects ray to the right of point
-                if ((y1 > y) != (y2 > y)):
-                    xinters = (x2 - x1) * (y - y1) / (y2 - y1 + 1e-12) + x1
-                    if x < xinters:
-                        inside = not inside
-            return inside
-
-        # Approximate Mindanao boundary (lon, lat). Conservative to avoid offshore dots.
-        MINDANAO_POLY = [
-            (121.05, 6.00),
-            (121.00, 7.10),
-            (121.35, 8.25),
-            (122.10, 8.95),
-            (123.05, 9.55),
-            (124.10, 10.10),
-            (125.25, 10.65),
-            (126.20, 10.40),
-            (126.95, 9.85),
-            (127.35, 8.90),
-            (127.45, 8.00),
-            (126.95, 7.20),
-            (126.55, 6.60),
-            (126.65, 6.05),
-            (126.10, 5.55),
-            (125.30, 5.20),
-            (124.55, 5.45),
-            (123.85, 5.60),
-            (123.20, 5.55),
-            (122.55, 5.90),
-            (122.00, 6.30),
-            (121.50, 6.15),
-            (121.05, 6.00),
-        ]
-
-        def _filter_mindanao_land_only(df_in: pd.DataFrame) -> pd.DataFrame:
-            """Hide points outside the blue Mindanao boundary (no plotting outside)."""
-            df0 = df_in.dropna(subset=["Latitude", "Longitude"]).copy()
-
-            # Fast prefilter (keeps app responsive)
-            df0 = df0[
-                (df0["Latitude"] >= 5.0) & (df0["Latitude"] <= 10.8) &
-                (df0["Longitude"] >= 121.0) & (df0["Longitude"] <= 127.8)
-            ]
-            if df0.empty:
-                return df0
-
-            mask = df0.apply(lambda r: _point_in_poly(r["Latitude"], r["Longitude"], MINDANAO_POLY), axis=1)
-            return df0.loc[mask]
-
-
         if "Latitude" in df.columns and "Longitude" in df.columns:
             model = st.session_state.get("model")
             scaler = st.session_state.get("scaler")
@@ -1196,7 +1174,7 @@ elif page == "📊 Visualization":
                         df_rf["Sustainability"] = p.apply(_bucket)
 
                     # Filter to Mindanao land-safe bounds (hides offshore/outside points)
-                    df_map = _filter_mindanao_land_only(df_rf).dropna(subset=["Sustainability"])
+                    df_map = _filter_to_mindanao_boundary(df_rf).dropna(subset=["Sustainability"])
 
                     if not df_map.empty:
                         center_lat = float(df_map["Latitude"].mean())
@@ -1356,8 +1334,6 @@ elif page == "📊 Visualization":
         else:
             st.info("No numeric columns available for correlation matrix.")
         st.markdown("---")
-
-
 elif page == "📈 Results":
     st.title("📈 Model Results & Interpretation")
     if not st.session_state.get("results"):
