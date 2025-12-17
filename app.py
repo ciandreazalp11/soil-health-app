@@ -27,82 +27,104 @@ from PIL import Image
 import warnings
 import re
 
-
-# =========================
-# Mindanao boundary filter (blue outline)
-# =========================
-def _point_in_poly(lat: float, lon: float, poly) -> bool:
-    """Ray casting point-in-polygon. poly is a list of (lat, lon)."""
-    inside = False
-    n = len(poly)
-    j = n - 1
-    for i in range(n):
-        lat_i, lon_i = poly[i]
-        lat_j, lon_j = poly[j]
-        if ( (lon_i > lon) != (lon_j > lon) ):
-            x = (lat_j - lat_i) * (lon - lon_i) / (lon_j - lon_i + 1e-12) + lat_i
-            if lat < x:
-                inside = not inside
-        j = i
-    return inside
-
-# Approximate Mindanao land boundary matching the blue outline (lat, lon)
-MINDANAO_POLYGON = [
-    (9.8, 123.7), (10.2, 124.5), (10.5, 125.5), (10.3, 126.6),
-    (9.7, 127.3), (8.8, 126.9), (8.1, 126.5), (7.3, 126.2),
-    (6.6, 125.7), (6.1, 125.1), (5.7, 124.6), (5.4, 123.9),
-    (5.2, 123.2), (5.1, 122.4), (5.3, 121.8), (5.8, 121.6),
-    (6.4, 121.8), (6.9, 122.3), (7.4, 122.7), (8.0, 123.1),
-    (8.6, 123.3), (9.2, 123.4)
-]
-
-
-# Areas to EXCLUDE (approx.) to remove offshore clusters that still fall inside the coarse boundary.
-# Each polygon is a list of (lat, lon) tuples. Tweak coordinates if needed.
-
-# Exclusion polygons (lat, lon) to remove offshore pockets that still fall inside a coarse Mindanao outline.
-# Any point inside ANY of these polygons will be HIDDEN from the Folium map.
-EXCLUDE_POLYGONS = [
-    # 1) Bohol Sea / north offshore band (above north Mindanao coast)
-    [
-        (10.80, 123.70), (10.80, 125.60), (9.70, 125.60), (9.35, 124.90),
-        (9.30, 124.10), (9.55, 123.70)
-    ],
-    # 2) Surigao / far north-east offshore pocket
-    [
-        (10.60, 126.50), (10.60, 127.70), (9.70, 127.70), (9.70, 126.70)
-    ],
-    # 3) Davao Gulf / south-east offshore pocket
-    [
-        (7.60, 125.70), (7.60, 126.90), (6.00, 126.90), (6.00, 125.70)
-    ],
-    # 4) Zamboanga / south-west offshore pocket
-    [
-        (7.80, 121.80), (7.80, 123.10), (5.30, 123.10), (5.30, 121.80)
-    ],
-]
-
-
-def _filter_to_mindanao_boundary(df_in: pd.DataFrame) -> pd.DataFrame:
-    """Return only rows whose (Latitude, Longitude) fall inside the Mindanao outline and outside exclude pockets."""
-    df0 = df_in.dropna(subset=["Latitude", "Longitude"]).copy()
-    lats = df0["Latitude"].astype(float).to_numpy()
-    lons = df0["Longitude"].astype(float).to_numpy()
-
-    keep = []
-    for lat, lon in zip(lats, lons):
-        inside_main = _point_in_poly(lat, lon, MINDANAO_POLYGON)
-        if not inside_main:
-            keep.append(False)
-            continue
-
-        inside_exclude = any(_point_in_poly(lat, lon, poly) for poly in EXCLUDE_POLYGONS)
-        keep.append(not inside_exclude)
-
-    return df0.loc[keep]
-
-
 warnings.filterwarnings("ignore", category=UserWarning)
+
+
+# =========================
+# Land-only filter (Mindanao) for Folium map
+# Uses Natural Earth 10m land polygons (downloaded once + cached).
+# Falls back to a conservative bounding-box filter if geopandas/shapely isn't available.
+# =========================
+
+import os
+import io
+import zipfile
+from pathlib import Path
+
+try:
+    import geopandas as gpd
+    from shapely.geometry import Point, box
+    from shapely.ops import unary_union
+    from shapely.prepared import prep
+except Exception:
+    gpd = None
+    Point = None
+    box = None
+    unary_union = None
+    prep = None
+
+@st.cache_resource
+def _get_mindanao_land_polygon():
+    """Return a prepared Shapely polygon approximating Mindanao LAND area only.
+    Downloads Natural Earth 10m land shapefile if needed and caches it locally.
+    """
+    if gpd is None or box is None or prep is None:
+        return None
+
+    cache_dir = Path.home() / ".cache" / "soil_health_app"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    zip_path = cache_dir / "ne_10m_land.zip"
+    shp_path = cache_dir / "ne_10m_land.shp"
+
+    if not shp_path.exists():
+        # Download Natural Earth 10m land (public domain)
+        import requests  # local import to avoid hard dependency at import time
+        url = "https://naturalearth.s3.amazonaws.com/10m_physical/ne_10m_land.zip"
+        r = requests.get(url, timeout=60)
+        r.raise_for_status()
+        zip_path.write_bytes(r.content)
+
+        with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
+            zf.extractall(cache_dir)
+
+    land = gpd.read_file(str(shp_path))
+
+    # Mindanao broad bbox (includes some sea, removed by land polygon)
+    mindanao_bbox = box(121.0, 4.0, 128.5, 11.5)
+
+    clipped = land[land.intersects(mindanao_bbox)].copy()
+    if clipped.empty:
+        return None
+
+    geom = unary_union(clipped.geometry)
+    geom = geom.intersection(mindanao_bbox)
+
+    # Keep largest polygon piece (main landmass in this bbox)
+    if geom.geom_type == "MultiPolygon":
+        geom = max(geom.geoms, key=lambda g: g.area)
+
+    return prep(geom)
+
+def _filter_mindanao_land_only(df_in: pd.DataFrame) -> pd.DataFrame:
+    """Hide points that are NOT on Mindanao land (automatic sea removal).
+    Requires Latitude/Longitude columns.
+    Falls back to conservative bbox if land polygon isn't available.
+    """
+    df0 = df_in.dropna(subset=["Latitude", "Longitude"]).copy()
+
+    # Fast pre-filter (keeps runtime low even on big datasets)
+    df0 = df0[
+        (df0["Latitude"].between(4.0, 11.5)) &
+        (df0["Longitude"].between(121.0, 128.5))
+    ]
+    if df0.empty:
+        return df0
+
+    prepared_land = _get_mindanao_land_polygon()
+    if prepared_land is None or Point is None:
+        # Fallback: tight "land-safe" bbox (may remove some coastal land points)
+        return df0[
+            (df0["Latitude"].between(5.0, 10.5)) &
+            (df0["Longitude"].between(121.5, 127.3))
+        ]
+
+    # Strict point-in-land test
+    keep_mask = []
+    for lat, lon in zip(df0["Latitude"].astype(float), df0["Longitude"].astype(float)):
+        keep_mask.append(prepared_land.contains(Point(lon, lat)))
+
+    return df0.loc[keep_mask]
 
 st.set_page_config(
     page_title="Machine Learning-Driven Soil Analysis for Sustainable Agriculture System",
@@ -1155,6 +1177,8 @@ elif page == "📊 Visualization":
         # ===== NEW: Folium classification map (RF) — dots only, strict Mindanao land-safe bounds, with legend =====
         st.subheader("🗺️ Soil Health Classification Map (Random Forest)")
         st.caption("Legend: 🟢 High • 🟠 Moderate • 🔴 Poor. Uses your trained Random Forest predictions.")
+
+
         if "Latitude" in df.columns and "Longitude" in df.columns:
             model = st.session_state.get("model")
             scaler = st.session_state.get("scaler")
@@ -1212,7 +1236,7 @@ elif page == "📊 Visualization":
                         df_rf["Sustainability"] = p.apply(_bucket)
 
                     # Filter to Mindanao land-safe bounds (hides offshore/outside points)
-                    df_map = _filter_to_mindanao_boundary(df_rf).dropna(subset=["Sustainability"])
+                    df_map = _filter_mindanao_land_only(df_rf).dropna(subset=["Sustainability"])
 
                     if not df_map.empty:
                         center_lat = float(df_map["Latitude"].mean())
@@ -1372,6 +1396,96 @@ elif page == "📊 Visualization":
         else:
             st.info("No numeric columns available for correlation matrix.")
         st.markdown("---")
+
+        # === Location map using Latitude/Longitude/Province, auto-focused on data in PH ===
+        if "Latitude" in df.columns and "Longitude" in df.columns:
+            st.subheader("🗺️ Location map of soil samples (auto-zoom on PH data)")
+            loc_df = df.dropna(subset=["Latitude", "Longitude"]).copy()
+            if not loc_df.empty:
+                # Basic sanity filter: keep only plausible PH lat/lon
+                loc_df = loc_df[
+                    (loc_df["Latitude"].between(4, 22))
+                    & (loc_df["Longitude"].between(116, 127))
+                ]
+
+                if loc_df.empty:
+                    st.info(
+                        "No latitude/longitude values fall inside Philippines bounds (4–22 N, 116–127 E)."
+                    )
+                else:
+                    prov_col = (
+                        "Province"
+                        if "Province" in loc_df.columns
+                        else ("province" if "province" in loc_df.columns else None)
+                    )
+
+                    color_col = None
+                    if "Fertility_Level" in loc_df.columns:
+                        color_col = "Fertility_Level"
+                    elif prov_col is not None:
+                        color_col = prov_col
+
+                    hover_cols = []
+                    if prov_col and prov_col in loc_df.columns:
+                        hover_cols.append(prov_col)
+                    for col in ["soil_type"]:
+                        if col in loc_df.columns and col not in hover_cols:
+                            hover_cols.append(col)
+                    for col in [
+                        "pH",
+                        "Nitrogen",
+                        "Phosphorus",
+                        "Potassium",
+                        "Moisture",
+                        "Organic Matter",
+                    ]:
+                        if col in loc_df.columns and col not in hover_cols:
+                            hover_cols.append(col)
+
+                    lat_min = float(loc_df["Latitude"].min())
+                    lat_max = float(loc_df["Latitude"].max())
+                    lon_min = float(loc_df["Longitude"].min())
+                    lon_max = float(loc_df["Longitude"].max())
+                    lat_center = (lat_min + lat_max) / 2.0
+                    lon_center = (lon_min + lon_max) / 2.0
+
+                    if color_col:
+                        fig_geo = px.scatter_geo(
+                            loc_df,
+                            lat="Latitude",
+                            lon="Longitude",
+                            color=color_col,
+                            hover_name=prov_col if prov_col else None,
+                            hover_data=hover_cols,
+                            title="Soil sample locations by fertility/province (Philippines)",
+                        )
+                    else:
+                        fig_geo = px.scatter_geo(
+                            loc_df,
+                            lat="Latitude",
+                            lon="Longitude",
+                            hover_data=hover_cols,
+                            title="Soil sample locations (Philippines)",
+                        )
+
+                    fig_geo.update_geos(
+                        scope="asia",
+                        center=dict(lat=lat_center, lon=lon_center),
+                        lataxis_range=[lat_min - 0.5, lat_max + 0.5],
+                        lonaxis_range=[lon_min - 0.5, lon_max + 0.5],
+                        showcoastlines=True,
+                        showcountries=True,
+                        countrycolor="white",
+                        coastlinecolor="white",
+                        projection_type="mercator",
+                    )
+                    fig_geo.update_layout(template="plotly_dark", height=500)
+                    st.plotly_chart(fig_geo, use_container_width=True)
+            else:
+                st.info(
+                    "Latitude/Longitude present but all rows are NaN; map cannot be drawn."
+                )
+
 elif page == "📈 Results":
     st.title("📈 Model Results & Interpretation")
     if not st.session_state.get("results"):
