@@ -59,27 +59,48 @@ MINDANAO_POLYGON = [
 
 # Areas to EXCLUDE (approx.) to remove offshore clusters that still fall inside the coarse boundary.
 # Each polygon is a list of (lat, lon) tuples. Tweak coordinates if needed.
+
+# Exclusion polygons (lat, lon) to remove offshore pockets that still fall inside a coarse Mindanao outline.
+# Any point inside ANY of these polygons will be HIDDEN from the Folium map.
 EXCLUDE_POLYGONS = [
-    # Bohol Sea pocket (north-central)
-    [(10.6, 124.2), (10.6, 125.0), (9.8, 125.0), (9.8, 124.2)],
-    # Surigao Sea pocket (north-east, off Surigao City)
-    [(10.6, 125.2), (10.6, 126.0), (9.9, 126.0), (9.9, 125.2)],
-    # Far north-east offshore pocket
-    [(10.8, 126.5), (10.8, 127.4), (10.0, 127.4), (10.0, 126.5)],
-    # Davao Gulf / south-east offshore pocket
-    [(7.2, 125.8), (7.2, 126.9), (6.1, 126.9), (6.1, 125.8)],
-    # South-west offshore pocket (Sulu Sea side)
-    [(6.8, 121.2), (6.8, 122.0), (5.7, 122.0), (5.7, 121.2)],
+    # 1) Bohol Sea / north offshore band (above north Mindanao coast)
+    [
+        (10.80, 123.70), (10.80, 125.60), (9.70, 125.60), (9.35, 124.90),
+        (9.30, 124.10), (9.55, 123.70)
+    ],
+    # 2) Surigao / far north-east offshore pocket
+    [
+        (10.60, 126.50), (10.60, 127.70), (9.70, 127.70), (9.70, 126.70)
+    ],
+    # 3) Davao Gulf / south-east offshore pocket
+    [
+        (7.60, 125.70), (7.60, 126.90), (6.00, 126.90), (6.00, 125.70)
+    ],
+    # 4) Zamboanga / south-west offshore pocket
+    [
+        (7.80, 121.80), (7.80, 123.10), (5.30, 123.10), (5.30, 121.80)
+    ],
 ]
 
 
 def _filter_to_mindanao_boundary(df_in: pd.DataFrame) -> pd.DataFrame:
-    """Return only rows whose (Latitude, Longitude) fall inside MINDANAO_POLYGON."""
+    """Return only rows whose (Latitude, Longitude) fall inside the Mindanao outline and outside exclude pockets."""
     df0 = df_in.dropna(subset=["Latitude", "Longitude"]).copy()
     lats = df0["Latitude"].astype(float).to_numpy()
     lons = df0["Longitude"].astype(float).to_numpy()
-    keep = [(_point_in_poly(lat, lon, MINDANAO_POLYGON) and not any(_point_in_poly(lat, lon, poly) for poly in EXCLUDE_POLYGONS)) for lat, lon in zip(lats, lons)]
+
+    keep = []
+    for lat, lon in zip(lats, lons):
+        inside_main = _point_in_poly(lat, lon, MINDANAO_POLYGON)
+        if not inside_main:
+            keep.append(False)
+            continue
+
+        inside_exclude = any(_point_in_poly(lat, lon, poly) for poly in EXCLUDE_POLYGONS)
+        keep.append(not inside_exclude)
+
     return df0.loc[keep]
+
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
